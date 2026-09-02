@@ -116,6 +116,8 @@ is evidence about the _pattern_, not about any one finding.
 
 ### Module structure
 
+Each feature module follows a consistent layering — routes (URL wiring) → controller (handlers, pure functions) → schema (validation/serialization) → view (presentation). Controllers stay free of Fastify types so they are unit-testable in isolation.
+
 ```
 src/
   app.ts            # Fastify bootstrap, error handler, raw-body capture
@@ -137,6 +139,10 @@ src/
   eval/             # offline eval harness (replay historical PRs)
   cli/              # review-agent CLI (explain-rule, dry-run, rule add/retire, report)
   dashboard/        # operational visibility layer: read-model projection, static UI + JSON API, SSE/polling, same app
+    routes.ts       # Fastify plugin: URL → controller wiring, applies schema
+    controller.ts   # handlers as pure functions (no Fastify types)
+    schema.ts       # JSON schema for validation/serialization
+    view.ts         # HTML template
   queue/            # BullMQ workers (review, feedback, learn)
   db/               # drizzle schema + client
   platform/         # Bitbucket / GitHub adapters

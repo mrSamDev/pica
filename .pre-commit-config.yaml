@@ -1,0 +1,30 @@
+# pre-commit quality gates. Install: `pre-commit install`
+# Run all: `pre-commit run --all-files`
+repos:
+  - repo: local
+    hooks:
+      - id: lint
+        name: lint (oxlint + anti-slop)
+        entry: pnpm lint
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: fmt
+        name: format (oxfmt, printWidth 300)
+        entry: pnpm fmt:check
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: typecheck
+        name: typecheck (tsc --noEmit)
+        entry: pnpm typecheck
+        language: system
+        pass_filenames: false
+        always_run: true
+      - id: test
+        name: test (vitest)
+        entry: pnpm test
+        language: system
+        pass_filenames: false
+        always_run: true
+        # db/queue tests spin up testcontainers (postgres + redis); they skip if Docker is down.
