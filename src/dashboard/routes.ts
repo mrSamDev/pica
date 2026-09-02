@@ -1,8 +1,5 @@
-import type { FastifyInstance, RawServerDefault } from "fastify";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { FastifyPluginAsync, FastifyTypeProviderDefault, RawServerDefault } from "fastify";
 import type { Logger } from "pino";
-
-type AppInstance = FastifyInstance<RawServerDefault, IncomingMessage, ServerResponse, Logger>;
 
 const dashboardHtml = `<!doctype html>
 <html lang="en">
@@ -27,12 +24,51 @@ const dashboardHtml = `<!doctype html>
   </body>
 </html>`;
 
-export function registerDashboard(app: AppInstance): void {
+const dashboardSchema = {
+  response: {
+    200: {
+      type: "object",
+      properties: {
+        system: {
+          type: "object",
+          properties: {
+            reviewsRunning: { type: "integer" },
+            reviewsCompleted: { type: "integer" },
+            reviewsFailed: { type: "integer" },
+            queueDepth: { type: "integer" },
+          },
+        },
+        reviewBehavior: {
+          type: "object",
+          properties: {
+            findingsPerPr: { type: "integer" },
+            posted: { type: "integer" },
+            suppressed: { type: "integer" },
+            duplicate: { type: "integer" },
+          },
+        },
+        learning: {
+          type: "object",
+          properties: {
+            activeRules: { type: "integer" },
+            candidateRules: { type: "integer" },
+            retiredRules: { type: "integer" },
+            learningLagMs: { type: ["integer", "null"] },
+            dismissalRateTrend: { type: "array", items: { type: "number" } },
+          },
+        },
+        recentActivity: { type: "array" },
+      },
+    },
+  },
+};
+
+export const dashboardPlugin: FastifyPluginAsync<Record<never, never>, RawServerDefault, FastifyTypeProviderDefault, Logger> = async (app) => {
   app.get("/dashboard", async (_request, reply) => {
     return reply.type("text/html").send(dashboardHtml);
   });
 
-  app.get("/api/dashboard", async () => {
+  app.get("/api/dashboard", { schema: dashboardSchema }, async () => {
     return {
       system: {
         reviewsRunning: 0,
@@ -56,4 +92,4 @@ export function registerDashboard(app: AppInstance): void {
       recentActivity: [],
     };
   });
-}
+};
