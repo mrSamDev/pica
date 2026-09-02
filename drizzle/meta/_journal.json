@@ -8,6 +8,20 @@
       "when": 1788361087148,
       "tag": "0000_cuddly_sumo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1788364399736,
+      "tag": "0001_jittery_typhoid_mary",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1788366019298,
+      "tag": "0002_flat_infant_terrible",
+      "breakpoints": true
     }
   ]
 }

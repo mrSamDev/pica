@@ -1,13 +1,30 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyRequest, type RawServerDefault } from "fastify";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Logger } from "pino";
+import type { Queue } from "bullmq";
 
 import type { Config } from "./config.ts";
 import { dashboardPlugin } from "./dashboard/routes.ts";
+import type { DashboardQueries } from "./dashboard/projection.ts";
+import type { Db } from "./db/client.ts";
+import type { LLMClient } from "./llm/client.ts";
+import type { PlatformClient } from "./platform/types.ts";
+import { createOutcomeQueue } from "./queue/outcome.ts";
+import { createReviewQueue } from "./queue/enqueue.ts";
+import { webhookPlugin } from "./webhooks/routes.ts";
+import { createWebhookStore } from "./webhooks/store.ts";
 
 type AppInstance = FastifyInstance<RawServerDefault, IncomingMessage, ServerResponse, Logger>;
 
-export function buildApp(config: Readonly<Config>, logger: Logger): AppInstance {
+export interface AppDeps {
+  db: Db;
+  queue: Queue;
+  platform: PlatformClient;
+  llm: LLMClient;
+  dashboardQueries: DashboardQueries;
+}
+
+export function buildApp(config: Readonly<Config>, logger: Logger, deps: AppDeps): AppInstance {
   const app = Fastify({
     loggerInstance: logger,
     // Behind Dokploy's reverse proxy; trust it so request.ip is the real client.
@@ -84,7 +101,14 @@ export function buildApp(config: Readonly<Config>, logger: Logger): AppInstance 
     });
   });
 
-  app.register(dashboardPlugin);
+  app.register(dashboardPlugin, { queries: deps.dashboardQueries });
+  app.register(webhookPlugin, {
+    config,
+    store: createWebhookStore(deps.db),
+    queue: createReviewQueue(deps.queue),
+    db: deps.db,
+    outcomeQueue: createOutcomeQueue(deps.queue),
+  });
 
   return app;
 }

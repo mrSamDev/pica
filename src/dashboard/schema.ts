@@ -21,6 +21,15 @@ export const dashboardSchema = {
             duplicate: { type: "integer" },
           },
         },
+        outcomes: {
+          type: "object",
+          properties: {
+            posted: { type: "integer" },
+            replied: { type: "integer" },
+            resolved: { type: "integer" },
+            dismissed: { type: "integer" },
+          },
+        },
         learning: {
           type: "object",
           properties: {

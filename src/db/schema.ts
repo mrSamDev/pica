@@ -16,17 +16,21 @@ export const reviews = pgTable("reviews", {
   error: text("error"),
 });
 
-export const patterns = pgTable("patterns", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  repo: text("repo").notNull(),
-  category: text("category").notNull(),
-  canonicalMessage: text("canonical_message").notNull(),
-  glob: text("glob"),
-  patternVersion: text("pattern_version").notNull(),
-  status: text("status").notNull(),
-  mergedInto: uuid("merged_into"),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+export const patterns = pgTable(
+  "patterns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    repo: text("repo").notNull(),
+    category: text("category").notNull(),
+    canonicalMessage: text("canonical_message").notNull(),
+    glob: text("glob"),
+    patternVersion: text("pattern_version").notNull(),
+    status: text("status").notNull(),
+    mergedInto: uuid("merged_into"),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [uniqueIndex("patterns_repo_category_message_unique").on(table.repo, table.category, table.canonicalMessage)],
+);
 
 export const findings = pgTable(
   "findings",
@@ -62,22 +66,28 @@ export const postedComments = pgTable(
   (table) => [uniqueIndex("posted_comments_unique").on(table.platform, table.commentId)],
 );
 
-export const findingOutcomes = pgTable("finding_outcomes", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  findingId: uuid("finding_id")
-    .references(() => findings.id, { onDelete: "cascade" })
-    .notNull(),
-  status: text("status").notNull(),
-  dismissalReason: text("dismissal_reason"),
-  resolvedAt: timestamp("resolved_at", { withTimezone: true }),
-  reason: text("reason"),
-  resolverUser: text("resolver_user"),
-  replyCount: integer("reply_count").default(0),
-  pollCount: integer("poll_count").default(0),
-  lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-  updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
-});
+export const findingOutcomes = pgTable(
+  "finding_outcomes",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    findingId: uuid("finding_id")
+      .references(() => findings.id, { onDelete: "cascade" })
+      .notNull(),
+    status: text("status").notNull(),
+    dismissalReason: text("dismissal_reason"),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+    reason: text("reason"),
+    resolverUser: text("resolver_user"),
+    replyCount: integer("reply_count").default(0),
+    pollCount: integer("poll_count").default(0),
+    lastPolledAt: timestamp("last_polled_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow(),
+  },
+  // One outcome row per finding. The poller and webhook both write here; the
+  // unique index makes the invariant hold in the DB, not just in code.
+  (table) => [uniqueIndex("finding_outcomes_finding_id_unique").on(table.findingId)],
+);
 
 export const learningEvents = pgTable(
   "learning_events",
@@ -125,15 +135,19 @@ export const ruleEvidence = pgTable("rule_evidence", {
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
 });
 
-export const webhookEvents = pgTable("webhook_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  platform: text("platform").notNull(),
-  eventKey: text("event_key").notNull(),
-  deliveryId: text("delivery_id"),
-  validated: boolean("validated").notNull(),
-  processed: boolean("processed").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+export const webhookEvents = pgTable(
+  "webhook_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    platform: text("platform").notNull(),
+    eventKey: text("event_key").notNull(),
+    deliveryId: text("delivery_id"),
+    validated: boolean("validated").notNull(),
+    processed: boolean("processed").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [uniqueIndex("webhook_events_event_key_unique").on(table.eventKey)],
+);
 
 export const llmCalls = pgTable("llm_calls", {
   id: uuid("id").primaryKey().defaultRandom(),

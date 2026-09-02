@@ -1,3 +1,4 @@
+import type { DashboardQueries } from "./projection.ts";
 import { dashboardHtml } from "./view.ts";
 
 export interface DashboardState {
@@ -13,6 +14,12 @@ export interface DashboardState {
     suppressed: number;
     duplicate: number;
   };
+  outcomes: {
+    posted: number;
+    replied: number;
+    resolved: number;
+    dismissed: number;
+  };
   learning: {
     activeRules: number;
     candidateRules: number;
@@ -27,21 +34,23 @@ export function getDashboardHtml(): string {
   return dashboardHtml;
 }
 
-// Read-model projection stub. Phase 1+ fills this from the event log.
-export function getDashboardState(): DashboardState {
+export async function getDashboardState(queries: DashboardQueries): Promise<DashboardState> {
+  const [system, findings, outcomes, activity, queueDepth] = await Promise.all([queries.countReviewsByStatus(), queries.countFindingsByStatus(), queries.countOutcomesByStatus(), queries.recentActivity(20), queries.queueDepth()]);
+
   return {
     system: {
-      reviewsRunning: 0,
-      reviewsCompleted: 0,
-      reviewsFailed: 0,
-      queueDepth: 0,
+      reviewsRunning: system.running,
+      reviewsCompleted: system.completed,
+      reviewsFailed: system.failed,
+      queueDepth,
     },
     reviewBehavior: {
-      findingsPerPr: 0,
-      posted: 0,
-      suppressed: 0,
-      duplicate: 0,
+      findingsPerPr: findings.posted + findings.suppressed + findings.duplicate,
+      posted: findings.posted,
+      suppressed: findings.suppressed,
+      duplicate: findings.duplicate,
     },
+    outcomes,
     learning: {
       activeRules: 0,
       candidateRules: 0,
@@ -49,6 +58,6 @@ export function getDashboardState(): DashboardState {
       learningLagMs: null,
       dismissalRateTrend: [],
     },
-    recentActivity: [],
+    recentActivity: activity,
   };
 }

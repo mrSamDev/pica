@@ -1,0 +1,2 @@
+CREATE UNIQUE INDEX "patterns_repo_category_message_unique" ON "patterns" USING btree ("repo","category","canonical_message");--> statement-breakpoint
+CREATE UNIQUE INDEX "webhook_events_event_key_unique" ON "webhook_events" USING btree ("event_key");

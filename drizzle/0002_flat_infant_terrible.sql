@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "finding_outcomes_finding_id_unique" ON "finding_outcomes" USING btree ("finding_id");

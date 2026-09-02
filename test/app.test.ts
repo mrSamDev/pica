@@ -3,16 +3,26 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
 import { loadConfig } from "../src/config.ts";
 import { createLogger } from "../src/observability/logger.ts";
+import { createFakeDashboardQueries, createFakeLlm, createFakePlatform, createUnusedDb, createUnusedQueue } from "./helpers/fakes.ts";
 
 const config = loadConfig({
   DATABASE_URL: "postgres://localhost:5432/pica",
   REDIS_URL: "redis://localhost:6379",
+  WEBHOOK_SECRET: "test-webhook-secret",
+  LLM_API_KEY: "test-llm-key",
+  PLATFORM_TOKEN: "test-platform-token",
   LOG_LEVEL: "silent",
 });
 const logger = createLogger(config);
 
 function makeApp() {
-  return buildApp(config, logger);
+  return buildApp(config, logger, {
+    db: createUnusedDb(),
+    queue: createUnusedQueue(),
+    platform: createFakePlatform(),
+    llm: createFakeLlm(),
+    dashboardQueries: createFakeDashboardQueries(),
+  });
 }
 
 describe("app", () => {

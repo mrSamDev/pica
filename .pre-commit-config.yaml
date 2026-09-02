@@ -28,3 +28,23 @@ repos:
         pass_filenames: false
         always_run: true
         # db/queue tests spin up testcontainers (postgres + redis); they skip if Docker is down.
+      - id: review-gate
+        name: review-gate (pi brutal review; blocks medium/large commits with issues)
+        entry: bash tools/review-gate.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        # Runs pi review on every commit. Blocks only when the staged change is
+        # medium/large (>= REVIEW_THRESHOLD lines, default 200) AND the review
+        # flags a blocking issue. Small commits are reviewed but never blocked.
+        # Env: REVIEW_THRESHOLD, REVIEW_MODEL, REVIEW_SKIP=1 to disable.
+      - id: comment-gate
+        name: comment-gate (pi validates comments against AGENTS.md)
+        entry: bash tools/comment-gate.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        # Extracts added comment lines from the staged diff and validates them
+        # against AGENTS.md comment rules using deepseek-v4-flash:cloud.
+        # Blocks when comments violate the rules.
+        # Env: COMMENT_MODEL, COMMENT_TIMEOUT, COMMENT_SKIP=1 to disable.

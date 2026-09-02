@@ -52,8 +52,12 @@
 
 ## Definition of done
 
-- [ ] Webhook → diff → LLM → comment end-to-end integration test (testcontainers) green
-- [ ] Eval harness runs against golden set, reports precision/recall
-- [ ] Dashboard shows live reviews + findings + system health + recent activity
-- [ ] All SSRF + HMAC security tests green
-- [ ] No `console.log` in `src/`
+- [x] Webhook → diff → LLM → comment end-to-end integration test (testcontainers) green — `test/e2e.test.ts`
+- [x] Eval harness runs against golden set, reports precision/recall — `src/eval/metrics.ts` + `src/eval/replay.ts`, `test/eval.test.ts`
+- [x] Dashboard shows live reviews + findings + system health + recent activity — `test/dashboard.test.ts` (17–21)
+- [x] All SSRF + HMAC security tests green — `test/ssrf.test.ts` (5–8), `test/webhooks.test.ts` (1–4)
+- [x] No `console.log` in `src/` — enforced by oxlint `no-console`
+
+### Manual (needs real platform + LLM tokens)
+
+- [ ] Review posts comments on a real PR — the automated E2E covers the full flow with a fake platform adapter; the live check requires real `PLATFORM_TOKEN` + `LLM_API_KEY` and a real webhook delivery.

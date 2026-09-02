@@ -28,6 +28,10 @@
 
 ## Definition of done
 
-- [ ] Observe mode integration test green (findings recorded, no comments)
-- [ ] Summary cap + severity priority tested
-- [ ] Per-repo mode/cap config tested
+- [x] Observe mode integration test green (findings recorded, no comments) — `test/pipeline-mode.test.ts` (observe mode records findings but does not post; dry-run posts nothing)
+- [x] Summary cap + severity priority tested — `test/summary.test.ts` + `src/review/pipeline/summary.ts` (`buildSummary`, `SUMMARY_CAP`)
+- [x] Per-repo mode/cap config tested — `test/config.test.ts` (per-repo override wins) + `src/config.ts` (`getRepoConfig`, `REPO_CONFIG`)
+
+### Manual (needs real platform + LLM tokens)
+
+- [ ] Observe mode posts a capped summary on a real PR — the automated tests cover the flow with a fake platform adapter; the live check requires real `PLATFORM_TOKEN` + `LLM_API_KEY` and a real webhook delivery with `REVIEW_MODE=observe` (or a per-repo `REPO_CONFIG` entry).
