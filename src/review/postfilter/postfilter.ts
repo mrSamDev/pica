@@ -29,7 +29,7 @@ function matchesExistingComment(finding: Finding, comment: ExistingComment): boo
 }
 
 function matchesPriorFinding(finding: Finding, prior: PriorFinding): boolean {
-  return finding.filePath === prior.filePath && finding.patternId === prior.patternId && rangesOverlap(finding.lineStart, finding.lineEnd, prior.lineStart, prior.lineEnd);
+  return finding.filePath === prior.filePath && finding.patternUuid === prior.patternUuid && rangesOverlap(finding.lineStart, finding.lineEnd, prior.lineStart, prior.lineEnd);
 }
 
 /**
@@ -42,12 +42,12 @@ export function applyPostFilter(input: PostFilterInput): PostFilterResult {
   const seenPatterns = new Set<string>();
 
   for (const finding of input.findings) {
-    if (input.suppressedPatternIds.has(finding.patternId)) {
+    if (input.suppressedPatternIds.has(finding.patternUuid)) {
       dropped.push({ finding, reason: "suppressed" });
       continue;
     }
 
-    const dedupKey = `${input.prId}:${finding.patternId}`;
+    const dedupKey = `${input.prId}:${finding.patternUuid}`;
     if (seenPatterns.has(dedupKey)) {
       dropped.push({ finding, reason: "duplicate" });
       continue;

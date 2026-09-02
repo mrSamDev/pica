@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { eq } from "drizzle-orm";
@@ -7,7 +8,7 @@ import { Pool } from "pg";
 
 import { loadConfig } from "../src/config.ts";
 import * as schema from "../src/db/schema.ts";
-import { findings, reviews } from "../src/db/schema.ts";
+import { findings, patterns, repoRules, reviews } from "../src/db/schema.ts";
 import type { LLMClient } from "../src/llm/client.ts";
 import type { PlatformClient } from "../src/platform/types.ts";
 import { runReview } from "../src/review/pipeline/pipeline.ts";
@@ -42,6 +43,7 @@ function makeFindings(count: number): Finding[] {
     lineEnd: 40 + i,
     category: "security",
     patternId: `security:pattern-${i}`,
+    patternUuid: `security:pattern-${i}`,
     severity: severities[i % 3] ?? "suggestion",
     message: `finding ${i}`,
   }));
@@ -196,5 +198,48 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     const rows = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
     expect(rows.filter((row) => row.status === "posted")).toHaveLength(2);
     expect(rows.filter((row) => row.status === "capped")).toHaveLength(3);
+  });
+
+  it("identity seam: real DB pattern resolution drives suppression", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const patternUuid = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa";
+    const reviewId = "66666666-6666-6666-6666-666666666666";
+    await seedReview(reviewId, "post");
+
+    // Seed the pattern + an active ignore rule referencing it by uuid.
+    await db.insert(patterns).values({ id: patternUuid, repo: "owner/repo", category: "security", canonicalMessage: "security:jwt-expiration", patternVersion: "v1", status: "active" });
+    await db.insert(repoRules).values({ repo: "owner/repo", ruleType: "ignore", patternId: patternUuid, payload: { reason: "test" }, payloadHash: "h", status: "active" });
+
+    // LLM returns a finding whose string patternId resolves to the seeded pattern.
+    const finding: Finding = { filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, category: "security", patternId: "security:jwt-expiration", patternUuid: "", severity: "error", message: "JWT expiration isn't validated." };
+    const { platform } = makePlatform();
+    await runReview({ db, platform, llm: makeLlm([finding]), config }, makeRequest(reviewId, "47", "post"));
+
+    const rows = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe("suppressed");
+    expect(rows[0]?.patternId).toBe(patternUuid);
+  });
+
+  it("identity seam: real DB pattern resolution drives cross-commit dedup", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const patternUuid = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb";
+    const reviewId = "77777777-7777-7777-7777-777777777777";
+    await seedReview(reviewId, "post");
+
+    await db.insert(patterns).values({ id: patternUuid, repo: "owner/repo", category: "security", canonicalMessage: "security:complexity", patternVersion: "v1", status: "active" });
+    // A prior finding on commit A for the same pattern at the same lines.
+    await db.insert(findings).values({ id: randomUUID(), reviewId, repo: "owner/repo", prId: "48", commitSha: "commitA", filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, category: "security", patternId: patternUuid, severity: "warning", message: "prior", messageHash: "h", status: "posted" });
+
+    // Commit B re-flags the same pattern at the same lines -> cross-commit drop.
+    const finding: Finding = { filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, category: "security", patternId: "security:complexity", patternUuid: "", severity: "warning", message: "complexity" };
+    const { platform } = makePlatform();
+    await runReview({ db, platform, llm: makeLlm([finding]), config }, makeRequest(reviewId, "48", "post", { commitSha: "commitB" }));
+
+    const rows = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
+    // The prior finding (commit A) + the dropped cross-commit finding (commit B).
+    expect(rows).toHaveLength(2);
+    const dropped = rows.find((row) => row.message === "complexity");
+    expect(dropped?.status).toBe("duplicate");
   });
 });

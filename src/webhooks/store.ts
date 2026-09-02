@@ -30,7 +30,11 @@ export function createWebhookStore(db: Db): WebhookStore {
           mode: review.mode,
         })
         .returning({ id: reviews.id });
-      return inserted[0]?.id ?? "";
+      const id = inserted[0]?.id;
+      if (!id) {
+        throw new Error("Failed to create review");
+      }
+      return id;
     },
   };
 }

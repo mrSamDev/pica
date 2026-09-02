@@ -7,7 +7,12 @@ export interface Finding {
   lineStart: number;
   lineEnd: number;
   category: string;
+  // LLM-emitted pattern key (e.g. "security:jwt-expiration"); the lookup key
+  // for ensurePattern. Never compared against DB UUIDs.
   patternId: string;
+  // Resolved patterns row uuid. The postfilter compares on this, so the LLM
+  // string space and the DB uuid space can never be mixed.
+  patternUuid: string;
   severity: Severity;
   message: string;
 }
@@ -37,6 +42,6 @@ export interface PriorFinding {
   filePath: string;
   lineStart: number;
   lineEnd: number;
-  patternId: string;
+  patternUuid: string;
   commitSha: string;
 }

@@ -42,5 +42,7 @@ export function parseReviewOutput(raw: string): Finding[] {
     throw new Error("LLM output does not match finding schema");
   }
 
-  return result.data;
+  // patternUuid is unresolved here; the pipeline resolves it via ensurePattern
+  // before the postfilter runs.
+  return result.data.map((finding) => ({ ...finding, patternUuid: "" }));
 }

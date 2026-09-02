@@ -10,6 +10,7 @@ function finding(overrides: Partial<Finding> = {}): Finding {
     lineEnd: 42,
     category: "security",
     patternId: "security:jwt-expiration",
+    patternUuid: "11111111-1111-1111-1111-111111111111",
     severity: "error",
     message: "JWT expiration isn't validated.",
     ...overrides,
@@ -29,10 +30,10 @@ describe("postfilter", () => {
   });
 
   it("skips suppressed patterns deterministically", () => {
-    const findings = [finding({ patternId: "complexity:high" }), finding({ patternId: "security:jwt-expiration" })];
-    const result = applyPostFilter({ prId: "42", findings, suppressedPatternIds: new Set(["complexity:high"]), ...empty });
+    const findings = [finding({ patternUuid: "22222222-2222-2222-2222-222222222222" }), finding({ patternUuid: "11111111-1111-1111-1111-111111111111" })];
+    const result = applyPostFilter({ prId: "42", findings, suppressedPatternIds: new Set(["22222222-2222-2222-2222-222222222222"]), ...empty });
     expect(result.findings).toHaveLength(1);
-    expect(result.findings[0]?.patternId).toBe("security:jwt-expiration");
+    expect(result.findings[0]?.patternUuid).toBe("11111111-1111-1111-1111-111111111111");
     expect(result.dropped[0]?.reason).toBe("suppressed");
   });
 
@@ -44,7 +45,7 @@ describe("postfilter", () => {
   });
 
   it("cross-commit dedup: no re-flag on commit B unless lines changed", () => {
-    const priorFindings: PriorFinding[] = [{ filePath: "src/auth.ts", lineStart: 42, lineEnd: 42, patternId: "security:jwt-expiration", commitSha: "commitA" }];
+    const priorFindings: PriorFinding[] = [{ filePath: "src/auth.ts", lineStart: 42, lineEnd: 42, patternUuid: "11111111-1111-1111-1111-111111111111", commitSha: "commitA" }];
     // Same pattern at the same lines on a later commit → dropped.
     const sameLines = applyPostFilter({ prId: "42", findings: [finding()], suppressedPatternIds: new Set(), existingComments: [], priorFindings });
     expect(sameLines.findings).toHaveLength(0);

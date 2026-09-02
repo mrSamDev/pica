@@ -18,6 +18,7 @@ const finding: Finding = {
   lineEnd: 42,
   category: "security",
   patternId: "22222222-2222-2222-2222-222222222222",
+  patternUuid: "22222222-2222-2222-2222-222222222222",
   severity: "error",
   message: "JWT expiration isn't validated.",
 };

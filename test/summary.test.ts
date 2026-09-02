@@ -4,7 +4,7 @@ import { buildSummary, SUMMARY_CAP } from "../src/review/pipeline/summary.ts";
 import type { Finding, Severity } from "../src/review/types.ts";
 
 function finding(severity: Severity, message: string, lineStart = 1): Finding {
-  return { filePath: "src/a.ts", lineStart, lineEnd: lineStart, category: "security", patternId: "p", severity, message };
+  return { filePath: "src/a.ts", lineStart, lineEnd: lineStart, category: "security", patternId: "p", patternUuid: "p", severity, message };
 }
 
 describe("buildSummary", () => {

@@ -55,7 +55,20 @@ export async function updateFindingStatus(db: Db, id: string, status: string): P
 }
 
 export async function insertPostedComment(db: Db, findingId: string, platform: string, commentId: string): Promise<void> {
-  await db.insert(postedComments).values({ findingId, platform, commentId });
+  // onConflictDoNothing: a worker retry reusing a stored comment_id must not
+  // double-insert (unique index on platform + comment_id is the backstop).
+  await db.insert(postedComments).values({ findingId, platform, commentId }).onConflictDoNothing();
+}
+
+// Idempotent posting: if a comment was already posted for this finding, return
+// its stored comment_id so a worker retry reuses it instead of re-posting.
+export async function fetchPostedCommentId(db: Db, platform: string, findingId: string): Promise<string | null> {
+  const rows = await db
+    .select({ commentId: postedComments.commentId })
+    .from(postedComments)
+    .where(and(eq(postedComments.platform, platform), eq(postedComments.findingId, findingId)))
+    .limit(1);
+  return rows[0]?.commentId ?? null;
 }
 
 export interface LlmCallRecord {
@@ -79,6 +92,8 @@ export async function recordLlmCall(db: Db, call: LlmCallRecord): Promise<void> 
 /**
  * Resolve an LLM pattern_id string to a patterns row uuid, creating the row on
  * first sight. The pattern is the learning unit, so it gets a stable row.
+ * Throws if the row cannot be created or found — a silent "" would corrupt the
+ * finding's pattern link.
  */
 export async function ensurePattern(db: Db, repo: string, category: string, patternId: string, patternVersion: string): Promise<string> {
   const inserted = await db.insert(patterns).values({ repo, category, canonicalMessage: patternId, patternVersion, status: "active" }).onConflictDoNothing().returning({ id: patterns.id });
@@ -90,7 +105,11 @@ export async function ensurePattern(db: Db, repo: string, category: string, patt
     .select({ id: patterns.id })
     .from(patterns)
     .where(and(eq(patterns.repo, repo), eq(patterns.category, category), eq(patterns.canonicalMessage, patternId)));
-  return existing[0]?.id ?? "";
+  const id = existing[0]?.id;
+  if (!id) {
+    throw new Error(`Failed to resolve pattern ${repo}/${category}/${patternId}`);
+  }
+  return id;
 }
 
 export async function fetchPriorFindings(db: Db, repo: string, prId: string): Promise<PriorFinding[]> {
@@ -99,7 +118,7 @@ export async function fetchPriorFindings(db: Db, repo: string, prId: string): Pr
       filePath: findings.filePath,
       lineStart: findings.lineStart,
       lineEnd: findings.lineEnd,
-      patternId: findings.patternId,
+      patternUuid: findings.patternId,
       commitSha: findings.commitSha,
     })
     .from(findings)
@@ -108,7 +127,7 @@ export async function fetchPriorFindings(db: Db, repo: string, prId: string): Pr
     filePath: row.filePath,
     lineStart: row.lineStart ?? 0,
     lineEnd: row.lineEnd ?? 0,
-    patternId: row.patternId ?? "",
+    patternUuid: row.patternUuid ?? "",
     commitSha: row.commitSha,
   }));
 }

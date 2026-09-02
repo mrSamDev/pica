@@ -25,6 +25,8 @@ Highlight:
 - Missing operational safeguards
 - Areas where senior engineers would immediately lose confidence
 
+Cover the ENTIRE diff: every file, every hunk. Do not sample, summarize away, or skip any file. A review that ignores part of the diff is a failed review.
+
 Be specific. Reference actual files, functions, and lines from the diff. Do not pad with generic filler.
 
 You MUST end your response with a single JSON object on its own line, exactly this shape:
