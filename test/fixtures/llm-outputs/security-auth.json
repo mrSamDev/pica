@@ -1,0 +1,20 @@
+[
+  {
+    "filePath": "src/auth.ts",
+    "lineStart": 42,
+    "lineEnd": 43,
+    "category": "security",
+    "patternId": "security:jwt-expiration",
+    "severity": "error",
+    "message": "JWT expiration isn't validated; a rejected token still passes."
+  },
+  {
+    "filePath": "src/auth.ts",
+    "lineStart": 12,
+    "lineEnd": 12,
+    "category": "security",
+    "patternId": "security:hardcoded-secret",
+    "severity": "warning",
+    "message": "Hardcoded signing secret in source; move to env config."
+  }
+]

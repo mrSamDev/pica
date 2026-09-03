@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
@@ -5,7 +6,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
 import * as schema from "../src/db/schema.ts";
-import { findings, findingOutcomes, reviews } from "../src/db/schema.ts";
+import { findings, findingOutcomes, patterns, repoRules, reviews, ruleEvidence } from "../src/db/schema.ts";
 import { createDashboardQueries } from "../src/dashboard/projection.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
@@ -71,5 +72,75 @@ describe.skipIf(!dockerAvailable)("dashboard projection", () => {
     ]);
     const queries = makeQueries(db);
     expect(await queries.countOutcomesByStatus()).toEqual({ posted: 1, replied: 0, resolved: 2, dismissed: 1 });
+  });
+
+  it("counts rules by status via GROUP BY", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const pa = randomUUID();
+    const pb = randomUUID();
+    const pc = randomUUID();
+    await db.insert(patterns).values([
+      { id: pa, repo: "r", category: "security", canonicalMessage: "security:count-a", patternVersion: "v1", status: "active" },
+      { id: pb, repo: "r", category: "security", canonicalMessage: "security:count-b", patternVersion: "v1", status: "active" },
+      { id: pc, repo: "r", category: "security", canonicalMessage: "security:count-c", patternVersion: "v1", status: "active" },
+    ]);
+    await db.insert(repoRules).values([
+      { repo: "r", ruleType: "ignore", patternId: pa, payload: { patternKey: "security:count-a" }, payloadHash: "h1", status: "active", confidence: "0.9", evidenceCount: 4, negativeCount: 4, positiveCount: 0, createdBy: "auto:learning" },
+      { repo: "r", ruleType: "ignore", patternId: pb, payload: { patternKey: "security:count-b" }, payloadHash: "h2", status: "candidate" },
+      { repo: "r", ruleType: "ignore", patternId: pc, payload: { patternKey: "security:count-c" }, payloadHash: "h3", status: "retired" },
+    ]);
+    const queries = makeQueries(db);
+    expect(await queries.countRulesByStatus()).toEqual({ active: 1, candidate: 1, retired: 1 });
+  });
+
+  it("lists rules with evidence counts and pattern", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const p1 = randomUUID();
+    await db.insert(patterns).values({ id: p1, repo: "r", category: "security", canonicalMessage: "security:listrule", patternVersion: "v1", status: "active" });
+    await db.insert(repoRules).values({ repo: "r", ruleType: "ignore", patternId: p1, payload: { patternKey: "security:listrule" }, payloadHash: "h", status: "active", confidence: "0.85", evidenceCount: 6, negativeCount: 6, positiveCount: 0, createdBy: "auto:learning" });
+    const queries = makeQueries(db);
+    const rules = await queries.listRules();
+    expect(rules.some((r) => r.pattern === "security:listrule" && r.confidence === 0.85 && r.evidenceCount === 6)).toBe(true);
+  });
+
+  it("why-disappeared: links a suppressed finding to its rule + evidence", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const patternId = randomUUID();
+    const findingId = randomUUID();
+    const ruleId = randomUUID();
+    const evidenceFindingId = randomUUID();
+    const reviewId = randomUUID();
+    await db.insert(reviews).values({ id: reviewId, repo: "r", prId: "182", commitSha: "abc", status: "done", mode: "post" });
+    await db.insert(patterns).values({ id: patternId, repo: "r", category: "security", canonicalMessage: "security:why", patternVersion: "v1", status: "active" });
+    await db.insert(findings).values({ id: findingId, reviewId, repo: "r", prId: "200", commitSha: "a", filePath: "src/a.ts", lineStart: 1, lineEnd: 1, category: "security", patternId, severity: "error", message: "JWT not validated", messageHash: "h", status: "suppressed" });
+    await db.insert(findings).values({ id: evidenceFindingId, reviewId, repo: "r", prId: "182", commitSha: "a", filePath: "src/b.ts", lineStart: 1, lineEnd: 1, category: "security", patternId, severity: "error", message: "JWT", messageHash: "h2", status: "posted" });
+    await db.insert(repoRules).values({ id: ruleId, repo: "r", ruleType: "ignore", patternId, payload: { patternKey: "security:why" }, payloadHash: "h", status: "active", confidence: "0.9", evidenceCount: 3, negativeCount: 3, positiveCount: 0, createdBy: "auto:learning" });
+    await db.insert(ruleEvidence).values({ ruleId, findingId: evidenceFindingId, outcome: "dismissed" });
+    await db.insert(findingOutcomes).values({ findingId: evidenceFindingId, status: "dismissed" });
+
+    const why = await makeQueries(db).whyDisappeared(findingId);
+    expect(why?.finding.status).toBe("suppressed");
+    expect(why?.pattern.canonicalMessage).toBe("security:why");
+    expect(why?.rule?.status).toBe("active");
+    expect(why?.rule?.confidence).toBeCloseTo(0.9);
+    expect(why?.evidence).toEqual([{ prId: "182", outcome: "dismissed" }]);
+    expect(why?.lastProbe).toBeNull();
+  });
+
+  it("why-disappeared: returns a rule-less record (post-filter drop, not a learned rule)", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    // A suppressed finding whose pattern has no learned rule must still resolve
+    // (the earlier ""-uuid evidence query 500s; this guards that path).
+    const patternId = randomUUID();
+    const findingId = randomUUID();
+    const reviewId = randomUUID();
+    await db.insert(reviews).values({ id: reviewId, repo: "r", prId: "300", commitSha: "abc", status: "done", mode: "post" });
+    await db.insert(patterns).values({ id: patternId, repo: "r", category: "security", canonicalMessage: "security:norule", patternVersion: "v1", status: "active" });
+    await db.insert(findings).values({ id: findingId, reviewId, repo: "r", prId: "300", commitSha: "a", filePath: "src/a.ts", lineStart: 1, lineEnd: 1, category: "security", patternId, severity: "error", message: "dup", messageHash: "hd", status: "suppressed" });
+
+    const why = await makeQueries(db).whyDisappeared(findingId);
+    expect(why?.finding.status).toBe("suppressed");
+    expect(why?.rule).toBeNull();
+    expect(why?.evidence).toEqual([]);
   });
 });

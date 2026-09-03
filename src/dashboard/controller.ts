@@ -1,5 +1,5 @@
-import type { DashboardQueries } from "./projection.ts";
-import { dashboardHtml } from "./view.ts";
+import type { DashboardQueries, RuleSummary, WhyDisappeared } from "./projection.ts";
+import { dashboardHtml, whyHtml } from "./view.ts";
 
 export interface DashboardState {
   system: {
@@ -35,8 +35,29 @@ export function getDashboardHtml(): string {
   return dashboardHtml;
 }
 
+export function getWhyHtml(): string {
+  return whyHtml;
+}
+
+export async function getRulesState(queries: DashboardQueries): Promise<RuleSummary[]> {
+  return queries.listRules();
+}
+
+export async function getWhyState(queries: DashboardQueries, findingId: string): Promise<WhyDisappeared | null> {
+  return queries.whyDisappeared(findingId);
+}
+
 export async function getDashboardState(queries: DashboardQueries): Promise<DashboardState> {
-  const [system, findings, outcomes, activity, queueDepth, failedJobs] = await Promise.all([queries.countReviewsByStatus(), queries.countFindingsByStatus(), queries.countOutcomesByStatus(), queries.recentActivity(20), queries.queueDepth(), queries.failedJobs()]);
+  const [system, findings, outcomes, activity, queueDepth, failedJobs, rules, learningLagMs] = await Promise.all([
+    queries.countReviewsByStatus(),
+    queries.countFindingsByStatus(),
+    queries.countOutcomesByStatus(),
+    queries.recentActivity(20),
+    queries.queueDepth(),
+    queries.failedJobs(),
+    queries.countRulesByStatus(),
+    queries.learningLag(),
+  ]);
 
   return {
     system: {
@@ -54,10 +75,10 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
     },
     outcomes,
     learning: {
-      activeRules: 0,
-      candidateRules: 0,
-      retiredRules: 0,
-      learningLagMs: null,
+      activeRules: rules.active,
+      candidateRules: rules.candidate,
+      retiredRules: rules.retired,
+      learningLagMs,
       dismissalRateTrend: [],
     },
     recentActivity: activity,

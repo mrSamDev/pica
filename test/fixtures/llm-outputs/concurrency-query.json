@@ -1,0 +1,11 @@
+[
+  {
+    "filePath": "src/orders/query.ts",
+    "lineStart": 88,
+    "lineEnd": 95,
+    "category": "concurrency",
+    "patternId": "concurrency:check-then-act",
+    "severity": "warning",
+    "message": "Check-then-act race on inventory count; read and decrement should be atomic."
+  }
+]

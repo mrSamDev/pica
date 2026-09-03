@@ -2,9 +2,10 @@ import { Queue } from "bullmq";
 import { Pool } from "pg";
 
 import { buildApp } from "./app.ts";
-import { loadConfig } from "./config.ts";
+import { loadConfig, getLearnerConfig } from "./config.ts";
 import { createDashboardQueries } from "./dashboard/projection.ts";
 import { createDb } from "./db/client.ts";
+import { runLearner } from "./learning/learner/learner.ts";
 import { createOpenRouterLLM } from "./llm/openrouter.ts";
 import { createLogger } from "./observability/logger.ts";
 import { createMetrics } from "./observability/metrics.ts";
@@ -38,7 +39,18 @@ const platform = config.PLATFORM === "github" ? createGitHubClient({ token: conf
 const llm = createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS });
 const reviewDeps = { db, platform, llm, config, metrics };
 const worker = createReviewWorker(redis, reviewDeps, logger);
-const outcomeWorker = createOutcomeWorker(redis, { db, metrics }, logger);
+const learnerConfig = getLearnerConfig(config);
+const outcomeWorker = createOutcomeWorker(
+  redis,
+  {
+    db,
+    metrics,
+    runLearner: async (input) => {
+      await runLearner(db, input, learnerConfig);
+    },
+  },
+  logger,
+);
 const app = buildApp(config, logger, {
   db,
   queue,

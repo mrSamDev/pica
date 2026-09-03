@@ -31,6 +31,10 @@ export function createFakeDashboardQueries(overrides?: Partial<DashboardQueries>
     recentActivity: async () => [],
     queueDepth: async () => 0,
     failedJobs: async () => 0,
+    countRulesByStatus: async () => ({ active: 0, candidate: 0, retired: 0 }),
+    listRules: async () => [],
+    learningLag: async () => null,
+    whyDisappeared: async () => null,
     ...overrides,
   };
 }

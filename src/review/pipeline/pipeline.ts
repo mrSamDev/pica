@@ -4,6 +4,7 @@ import type { Config } from "../../config.ts";
 import type { Db } from "../../db/client.ts";
 import { ensureOutcome } from "../../db/outcomes.ts";
 import { emitEvent } from "../../learning/events.ts";
+import { getReviewLearningContext } from "../../learning/retrieval/retrieval.ts";
 import type { LLMClient } from "../../llm/client.ts";
 import type { Metrics } from "../../observability/metrics.ts";
 import type { PlatformClient } from "../../platform/types.ts";
@@ -13,7 +14,7 @@ import { buildPrompt } from "../prompts/build.ts";
 import type { Finding, ReviewRequest } from "../types.ts";
 import { chunkDiff } from "./chunk.ts";
 import { withFeedbackFooter } from "./comment.ts";
-import { ensurePattern, fetchPostedCommentId, fetchPriorFindings, fetchSuppressedPatternIds, insertFindings, insertFindingsReturning, insertPostedComment, recordLlmCall, toFindingRow, updateFindingStatus, type FindingRow } from "./queries.ts";
+import { ensurePattern, fetchPostedCommentId, fetchPriorFindings, insertFindings, insertFindingsReturning, insertPostedComment, recordLlmCall, toFindingRow, updateFindingStatus, type FindingRow } from "./queries.ts";
 import { buildSummary, severityOrder } from "./summary.ts";
 
 export interface ReviewDeps {
@@ -37,9 +38,14 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
   const rawDiff = await deps.platform.fetchDiff(request.diffHref);
   const chunks = chunkDiff(rawDiff);
 
+  // Read model (§5.8): active rules + memory context are injected into every
+  // prompt, so the model sees what the repo has learned, and the post-filter
+  // enforces suppression deterministically after parsing.
+  const learningContext = await getReviewLearningContext(deps.db, request.repo);
+
   const allFindings: Finding[] = [];
   for (const chunk of chunks) {
-    const prompt = buildPrompt({ diff: chunk.raw, repo: request.repo, prId: request.prId });
+    const prompt = buildPrompt({ diff: chunk.raw, repo: request.repo, prId: request.prId, rulesText: learningContext.rulesText, memoryContext: learningContext.memoryContext });
     const raw = await deps.llm.review(prompt);
     if (request.mode !== "dry-run") {
       await recordLlmCall(deps.db, {
@@ -60,7 +66,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
     return { findings: allFindings, posted: 0 };
   }
 
-  const [suppressedPatternIds, priorFindings, existingComments] = await Promise.all([fetchSuppressedPatternIds(deps.db, request.repo), fetchPriorFindings(deps.db, request.repo, request.prId), deps.platform.listComments(request.repo, request.prId)]);
+  const [priorFindings, existingComments] = await Promise.all([fetchPriorFindings(deps.db, request.repo, request.prId), deps.platform.listComments(request.repo, request.prId)]);
 
   // Resolve the LLM pattern string to a stable patterns row uuid before the
   // postfilter, so suppression and cross-commit dedup compare uuids, not the
@@ -72,7 +78,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
   const filtered = applyPostFilter({
     prId: request.prId,
     findings: allFindings,
-    suppressedPatternIds,
+    suppressedPatternIds: learningContext.suppressedPatternIds,
     existingComments,
     priorFindings,
   });

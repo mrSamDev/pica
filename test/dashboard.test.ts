@@ -66,6 +66,65 @@ describe("dashboard", () => {
     await app.close();
   });
 
+  it("serves the dashboard HTML with the poll + rules renderers intact", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("function poll()");
+    expect(res.body).toContain("function renderRules");
+    expect(res.body).toContain("function render(state)");
+    await app.close();
+  });
+
+  it("shows the learning panel: rule counts + learning lag", async () => {
+    const queries = createFakeDashboardQueries({
+      countRulesByStatus: async () => ({ active: 2, candidate: 1, retired: 0 }),
+      learningLag: async () => 3600,
+    });
+    const app = makeApp(queries);
+    const res = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(res.json().learning).toMatchObject({ activeRules: 2, candidateRules: 1, retiredRules: 0, learningLagMs: 3600 });
+    await app.close();
+  });
+
+  it("shows rules with evidence counts (Phase 3 learned rules view)", async () => {
+    const queries = createFakeDashboardQueries({
+      listRules: async () => [{ id: "r1", repo: "owner/repo", ruleType: "ignore", status: "active", pattern: "security:jwt", confidence: 0.9, evidenceCount: 3, positiveCount: 0, negativeCount: 3, createdAt: new Date() }],
+    });
+    const app = makeApp(queries);
+    const res = await app.inject({ method: "GET", url: "/api/rules" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toHaveLength(1);
+    expect(res.json()[0]).toMatchObject({ pattern: "security:jwt", status: "active", negativeCount: 3 });
+    await app.close();
+  });
+
+  it("why-disappeared drill-down: shows rule, confidence, evidence, learned-from PRs", async () => {
+    const queries = createFakeDashboardQueries({
+      whyDisappeared: async (findingId: string) =>
+        findingId === "abc"
+          ? {
+              finding: { status: "suppressed", filePath: "src/a.ts", message: "JWT", severity: "error", prId: "200" },
+              pattern: { canonicalMessage: "security:jwt", category: "security" },
+              rule: { status: "active", confidence: 0.9, evidenceCount: 3, positiveCount: 0, negativeCount: 3 },
+              evidence: [{ prId: "182", outcome: "dismissed" }],
+              lastProbe: null,
+            }
+          : null,
+    });
+    const app = makeApp(queries);
+    const res = await app.inject({ method: "GET", url: "/api/why?findingId=abc" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()?.rule?.confidence).toBeCloseTo(0.9);
+    expect(res.json()?.evidence).toEqual([{ prId: "182", outcome: "dismissed" }]);
+
+    // Unknown finding -> null (not an error).
+    const missing = await app.inject({ method: "GET", url: "/api/why?findingId=nope" });
+    expect(missing.statusCode).toBe(200);
+    expect(missing.json()).toBeNull();
+    await app.close();
+  });
+
   it("shows recent activity from the immutable log", async () => {
     const queries = createFakeDashboardQueries({
       recentActivity: async () => [

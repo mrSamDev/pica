@@ -127,13 +127,19 @@ export const repoRules = pgTable(
   (table) => [uniqueIndex("repo_rules_unique").on(table.repo, table.ruleType, table.patternId)],
 );
 
-export const ruleEvidence = pgTable("rule_evidence", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  ruleId: uuid("rule_id").references(() => repoRules.id),
-  findingId: uuid("finding_id").references(() => findings.id),
-  outcome: text("outcome").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
-});
+// Links every rule to the findings that produced it. Unique per (rule, finding)
+// makes the learner's audit-trail insert idempotent across retries.
+export const ruleEvidence = pgTable(
+  "rule_evidence",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ruleId: uuid("rule_id").references(() => repoRules.id),
+    findingId: uuid("finding_id").references(() => findings.id),
+    outcome: text("outcome").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
+  },
+  (table) => [uniqueIndex("rule_evidence_rule_finding_unique").on(table.ruleId, table.findingId)],
+);
 
 export const webhookEvents = pgTable(
   "webhook_events",

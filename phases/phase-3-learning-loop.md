@@ -42,9 +42,9 @@
 
 ## Definition of done
 
-- [ ] Learning-loop end-to-end test green (dismiss 3× → candidate → Beta → future review excludes)
-- [ ] Taxonomy snapshot tests green against real LLM outputs
-- [ ] Event immutability + idempotency tested
-- [ ] Severity weighting math tested
-- [ ] Dashboard rules/learning view tested
-- [ ] Dashboard why-disappeared drill-down tested
+- [x] Learning-loop end-to-end test green (dismiss 3× → candidate → Beta → future review excludes) — `test/learning-loop.test.ts`, `test/learner.test.ts`
+- [x] Taxonomy snapshot tests green against real LLM outputs — `test/taxonomy.test.ts` (fixtures in `test/fixtures/llm-outputs/`, regenerate via `tools/capture-llm-outputs.ts`)
+- [x] Event immutability + idempotency tested — `test/learning-events.test.ts` (DB trigger rejects UPDATE/DELETE)
+- [x] Severity weighting math tested — `test/learner.test.ts`, `test/learning-signals.test.ts`
+- [x] Dashboard rules/learning view tested — `test/dashboard.test.ts`, `test/dashboard-projection.test.ts` (`/api/rules`, learning panel counts + lag)
+- [x] Dashboard why-disappeared drill-down tested — `test/dashboard.test.ts`, `test/dashboard-projection.test.ts` (`/api/why?findingId=`)

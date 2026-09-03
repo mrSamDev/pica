@@ -32,6 +32,10 @@ export function createOutcomeQueue(queue: Queue): OutcomeQueue {
 export interface OutcomeDeps {
   db: Db;
   metrics: Metrics;
+  // §5.6 Inline learner hook. Runs after a terminal evidence outcome so the
+  // loop closes: dismissal -> event -> rule candidate/activation. Kept inside
+  // this worker (concurrency 1) and idempotent so a retry never double-counts.
+  runLearner?: (input: { findingId: string; repo: string }) => Promise<void>;
 }
 
 // Apply one outcome mutation. The state machine rejects invalid transitions and
@@ -72,6 +76,15 @@ async function emitOutcomeEvent(db: Db, job: OutcomeJob): Promise<void> {
   });
 }
 
+// Runs the learner for terminal evidence outcomes (resolved/dismissed). Called
+// unconditionally after applyOutcome — even when applyOutcome early-returns on
+// an already-terminal state — so a retry after the learner threw still converges.
+async function maybeRunLearner(deps: OutcomeDeps, job: OutcomeJob): Promise<void> {
+  if (!deps.runLearner) return;
+  if (job.to !== "resolved" && job.to !== "dismissed") return;
+  await deps.runLearner({ findingId: job.findingId, repo: job.repo });
+}
+
 export function createOutcomeWorker(connection: Redis, deps: OutcomeDeps, logger: Logger): Worker {
   // concurrency 1: the serialization guarantee that webhook + poller writes
   // cannot race. All outcome mutations funnel through this single worker.
@@ -82,6 +95,7 @@ export function createOutcomeWorker(connection: Redis, deps: OutcomeDeps, logger
       const data = job.data as OutcomeJob;
       logger.info({ jobId: job.id, findingId: data.findingId, to: data.to }, "applying outcome");
       await applyOutcome(deps, data);
+      await maybeRunLearner(deps, data);
     },
     { connection, concurrency: 1 },
   );

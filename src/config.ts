@@ -19,6 +19,14 @@ export interface RepoConfig {
   summaryComment: boolean;
 }
 
+const severityWeightsSchema = z.object({
+  error: z.coerce.number().positive(),
+  warning: z.coerce.number().positive(),
+  suggestion: z.coerce.number().positive(),
+});
+
+export type SeverityWeights = z.infer<typeof severityWeightsSchema>;
+
 const configSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   HOST: z.string().default("0.0.0.0"),
@@ -70,9 +78,43 @@ const configSchema = z.object({
       }
       return repoConfigSchema.parse(parsed);
     }),
+  // Learner (§5.6). Config, not magic numbers. Defaults tuned so a pattern
+  // dismissed 3+ times forms an active rule, matching §14. Tests pin explicit
+  // min_evidence / threshold values to exercise the gate progression.
+  LEARNER_MIN_EVIDENCE: z.coerce.number().int().positive().default(3),
+  LEARNER_ACTIVATION_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
+  // Severity weighting (§5.6): a dismissed error counts more than a dismissed
+  // suggestion, in both the generated and negative counts.
+  LEARNER_SEVERITY_WEIGHTS: z
+    .string()
+    .default('{"error":3,"warning":2,"suggestion":1}')
+    .transform((value) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        throw new Error("LEARNER_SEVERITY_WEIGHTS must be valid JSON");
+      }
+      return severityWeightsSchema.parse(parsed);
+    }),
 });
 
 export type Config = z.infer<typeof configSchema>;
+
+export interface LearnerConfig {
+  minEvidence: number;
+  activationThreshold: number;
+  severityWeights: SeverityWeights;
+}
+
+/** Learner knobs from config, shape the learner consumes directly. */
+export function getLearnerConfig(config: Readonly<Config>): LearnerConfig {
+  return {
+    minEvidence: config.LEARNER_MIN_EVIDENCE,
+    activationThreshold: config.LEARNER_ACTIVATION_THRESHOLD,
+    severityWeights: config.LEARNER_SEVERITY_WEIGHTS,
+  };
+}
 
 /**
  * Effective posting behavior for a repo: per-repo override, else global default.
