@@ -27,7 +27,7 @@
 
 ## Definition of done
 
-- [ ] Retrieval problem documented (the case that motivated it)
-- [ ] Semantic-vs-taxonomy eval shows semantic wins
-- [ ] No pgvector installed before the gate
-- [ ] Comment hygiene — src comments explain _why_, never restate code; no decorative/duplicated comments (gate: phase-6 TDD list item 7).
+- [x] Retrieval problem documented (the case that motivated it) — `docs/retrieval-problem.md`, `test/retrieval-problem.test.ts`
+- [x] Semantic-vs-taxonomy eval shows semantic wins — `test/eval-retrieval.test.ts` (semantic recall > taxonomy recall)
+- [x] No pgvector installed before the gate — the gate test exercises only V1 taxonomy; pgvector lands after (docs/retrieval-problem.md §gate order)
+- [x] Comment hygiene — src comments explain _why_, never restate code; no decorative/duplicated comments (gate: phase-6 TDD list item 7). Enforced by `test/comment-hygiene.test.ts`.

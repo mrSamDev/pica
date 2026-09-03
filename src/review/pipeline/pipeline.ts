@@ -86,7 +86,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
   // postfilter, so suppression and cross-commit dedup compare uuids, not the
   // LLM's free-text keys.
   for (const finding of allFindings) {
-    finding.patternUuid = await ensurePattern(deps.db, request.repo, finding.category, finding.patternId, "v1");
+    finding.patternUuid = await ensurePattern(deps.db, request.repo, finding.category, finding.patternId, "v1", finding.message);
   }
 
   const filtered = applyPostFilter({

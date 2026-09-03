@@ -15,7 +15,7 @@ describe.skipIf(!dockerAvailable)("migrations", () => {
   let pool: Pool | undefined;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:17-alpine").start();
+    container = await new PostgreSqlContainer("pgvector/pgvector:pg17").start();
     pool = new Pool({ connectionString: container.getConnectionUri() });
   }, 120_000);
 

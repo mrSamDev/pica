@@ -104,7 +104,7 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
   let platform: ReturnType<typeof makeFakePlatform> | undefined;
 
   beforeAll(async () => {
-    pg = await new PostgreSqlContainer("postgres:16-alpine").start();
+    pg = await new PostgreSqlContainer("pgvector/pgvector:pg16").start();
     pool = new Pool({ connectionString: pg.getConnectionUri() });
     db = drizzle(pool, { schema });
     await runMigrations(db);

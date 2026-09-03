@@ -15,7 +15,7 @@ describe.skipIf(!dockerAvailable)("db schema", () => {
   let pool: Pool | undefined;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:16-alpine").start();
+    container = await new PostgreSqlContainer("pgvector/pgvector:pg16").start();
     pool = new Pool({ connectionString: container.getConnectionUri() });
   }, 120_000);
 

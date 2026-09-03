@@ -43,7 +43,7 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
   let outcomeQueue: OutcomeQueue | undefined;
 
   beforeAll(async () => {
-    pg = await new PostgreSqlContainer("postgres:16-alpine").start();
+    pg = await new PostgreSqlContainer("pgvector/pgvector:pg16").start();
     pool = new Pool({ connectionString: pg.getConnectionUri() });
     const raw = drizzle(pool);
     await migrate(raw, { migrationsFolder: "./drizzle" });

@@ -56,7 +56,7 @@ describe.skipIf(!dockerAvailable)("§3 review reproducibility columns", () => {
   let db: NodePgDatabase<typeof schema> | undefined;
 
   beforeAll(async () => {
-    container = await new PostgreSqlContainer("postgres:16-alpine").start();
+    container = await new PostgreSqlContainer("pgvector/pgvector:pg16").start();
     pool = new Pool({ connectionString: container.getConnectionUri() });
     const raw = drizzle(pool);
     await migrate(raw, { migrationsFolder: "./drizzle" });

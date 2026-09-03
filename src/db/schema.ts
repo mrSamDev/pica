@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, index, integer, jsonb, numeric, pgTable, text, timestamp, uniqueIndex, uuid, vector } from "drizzle-orm/pg-core";
 
 export const reviews = pgTable("reviews", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -27,6 +27,10 @@ export const patterns = pgTable(
     patternVersion: text("pattern_version").notNull(),
     status: text("status").notNull(),
     mergedInto: uuid("merged_into"),
+    // §5.10 V2: message-derived embedding for semantic retrieval. Nullable so
+    // a pattern created pre-embeddings stays valid under exact taxonomy matching
+    // until its next finding re-embeds it (ensurePattern refreshes on conflict).
+    embedding: vector("embedding", { dimensions: 256 }),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
   },
   (table) => [uniqueIndex("patterns_repo_category_message_unique").on(table.repo, table.category, table.canonicalMessage)],

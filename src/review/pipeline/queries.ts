@@ -3,6 +3,7 @@ import { and, eq, ne } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
 import { findings, llmCalls, patterns, postedComments, reviews } from "../../db/schema.ts";
+import { embed } from "../../learning/retrieval/embed.ts";
 import type { Finding, PriorFinding } from "../types.ts";
 
 export interface FindingRow {
@@ -118,8 +119,19 @@ export async function recordLlmCall(db: Db, call: LlmCallRecord): Promise<void> 
  * Throws if the row cannot be created or found — a silent "" would corrupt the
  * finding's pattern link.
  */
-export async function ensurePattern(db: Db, repo: string, category: string, patternId: string, patternVersion: string): Promise<string> {
-  const inserted = await db.insert(patterns).values({ repo, category, canonicalMessage: patternId, patternVersion, status: "active" }).onConflictDoNothing().returning({ id: patterns.id });
+// The embedding is the pattern's semantic center (§5.10 V2). Set on first sight
+// and refreshed whenever a later review re-encounters the pattern — so a pattern
+// created before embeddings shipped gets one organically on its next finding,
+// without a backfill job.
+export async function ensurePattern(db: Db, repo: string, category: string, patternId: string, patternVersion: string, message: string): Promise<string> {
+  const inserted = await db
+    .insert(patterns)
+    .values({ repo, category, canonicalMessage: patternId, patternVersion, status: "active", embedding: embed(message) })
+    .onConflictDoUpdate({
+      target: [patterns.repo, patterns.category, patterns.canonicalMessage],
+      set: { embedding: embed(message) },
+    })
+    .returning({ id: patterns.id });
   if (inserted[0]?.id) {
     return inserted[0].id;
   }

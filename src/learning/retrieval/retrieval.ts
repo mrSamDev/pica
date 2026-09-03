@@ -4,6 +4,7 @@ import { and, desc, eq } from "drizzle-orm";
 import type { Db } from "../../db/client.ts";
 import type { SuppressionRules } from "../../review/types.ts";
 import { findings, patterns, repoRules } from "../../db/schema.ts";
+import { findRelatedPatterns } from "./semantic.ts";
 
 // §5.8 Read model. Retrieval excludes dismissed patterns (deterministic
 // suppression) and renders active rules into the prompt's REPO RULES section.
@@ -14,7 +15,7 @@ import { findings, patterns, repoRules } from "../../db/schema.ts";
 // switch. A content hash would churn on every review and couldn't express the
 // strategy flip; exact-bytes reproducibility lives in `llm_calls.prompt_hash`.
 // Bump only when the retrieval logic changes shape.
-export const RETRIEVAL_VERSION = "v1";
+export const RETRIEVAL_VERSION = "v2";
 
 // rules_version: deterministic fingerprint over the rendered rules actually
 // injected into a prompt (or the replay's rules). "none" when no rules were
@@ -99,13 +100,15 @@ export async function getReviewLearningContext(db: Db, repo: string): Promise<Re
 
 // Compact memory of patterns the repo has flagged before, excluding any pattern
 // an active ignore rule suppresses (§5.8: retrieval excludes dismissed). Kept
-// small so a long-lived repo doesn't blow up the prompt.
+// small so a long-lived repo doesn't blow up the prompt. Near-duplicate pattern
+// keys (same issue, different LLM pattern_id) are surfaced as "related:" lines
+// via the semantic tier so the prompt sees the link instead of fragmenting it.
 async function buildMemoryContext(db: Db, repo: string, suppressed: ReadonlySet<string>): Promise<string> {
   const rows = await db
     .select({
+      patternId: patterns.id,
       patternKey: patterns.canonicalMessage,
       category: patterns.category,
-      patternId: patterns.id,
       message: findings.message,
       createdAt: findings.createdAt,
     })
@@ -115,15 +118,32 @@ async function buildMemoryContext(db: Db, repo: string, suppressed: ReadonlySet<
     .orderBy(desc(findings.createdAt))
     .limit(60);
 
-  const byPattern = new Map<string, string>();
+  const byPattern = new Map<string, { canonical: string; example: string; id: string }>();
   for (const row of rows) {
     if (!row.patternId || suppressed.has(row.patternId)) continue;
     const key = `${row.category}:${row.patternKey}`;
-    if (!byPattern.has(key)) byPattern.set(key, row.message ?? "");
+    if (!byPattern.has(key)) byPattern.set(key, { canonical: row.patternKey, example: row.message ?? "", id: row.patternId });
   }
 
-  const lines = Array.from(byPattern.entries())
-    .slice(0, 15)
-    .map(([key, example]) => `- ${key}${example ? ` — e.g. "${example.slice(0, 200)}"` : ""}`);
+  const shown = Array.from(byPattern.entries()).slice(0, 15);
+  const lines = shown.map(([key, value]) => `- ${key}${value.example ? ` — e.g. "${value.example.slice(0, 200)}"` : ""}`);
+
+  // §5.10 V2: pair near-duplicate keys (same issue, different pattern_id). The
+  // query resolves only to keys already displayed above, so a related line never
+  // references a pattern the prompt doesn't show. Bounded to the first few keys
+  // to keep the read model cheap (§5.9 rebuildable projection).
+  const emitted = new Set<string>();
+  for (const [key, value] of shown.slice(0, 5)) {
+    if (!value.example) continue;
+    const siblings = await findRelatedPatterns(db, repo, value.example, { excludePatternId: value.id, limit: 5 });
+    for (const sibling of siblings) {
+      const siblingKey = shown.find(([, entry]) => entry.canonical === sibling && entry.id !== value.id)?.[0];
+      if (!siblingKey) continue;
+      const pair = [key, siblingKey].sort().join(" ≈ ");
+      if (emitted.has(pair)) continue;
+      emitted.add(pair);
+      lines.push(`- related: ${pair}`);
+    }
+  }
   return lines.join("\n");
 }
