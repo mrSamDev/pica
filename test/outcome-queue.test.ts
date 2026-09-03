@@ -111,6 +111,23 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
     expect(rows[0]?.resolverUser).toBe("alice");
   });
 
+  it("webhook outcome event updates outcome (comment deleted -> dismissed)", async () => {
+    if (outcomeQueue === undefined || db === undefined) throw new Error("setup not initialized");
+    const findingId = await seedPostedFinding("c-del");
+    await handleOutcomeEvent({ db, queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_deleted", commentId: "c-del", platform: "github" });
+    await waitForStatus(findingId, "dismissed", 10_000);
+  });
+
+  it("a reply event attributes via in_reply_to when the reply id is unknown", async () => {
+    if (outcomeQueue === undefined || db === undefined) throw new Error("setup not initialized");
+    const findingId = await seedPostedFinding("c-9");
+    // GitHub delivers a reply as a new comment id whose in_reply_to_id is ours.
+    await handleOutcomeEvent({ db, queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_created", commentId: "c-reply-9", inReplyTo: "c-9", content: "dismiss: doesn't apply to this file", platform: "github" });
+    await waitForStatus(findingId, "dismissed", 10_000);
+    const rows = await db.select({ dismissalReason: findingOutcomes.dismissalReason }).from(findingOutcomes).where(eq(findingOutcomes.findingId, findingId));
+    expect(rows[0]?.dismissalReason).toBe("doesn't apply to this file");
+  });
+
   it("outcome mutations funnel through one queue: concurrent webhook+poller writes cannot race", async () => {
     if (outcomeQueue === undefined || db === undefined) throw new Error("setup not initialized");
     const findingId = await seedPostedFinding("c-7");

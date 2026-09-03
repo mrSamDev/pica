@@ -164,6 +164,9 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
 
     expect(platform.posted).toHaveLength(1);
     expect(platform.posted[0]?.content).toContain("JWT expiration");
+    // §5.12: every posted comment teaches the feedback protocol so dismiss
+    // replies can actually arrive.
+    expect(platform.posted[0]?.content).toContain("Not useful? Reply `dismiss: <reason>`");
 
     const rows = await db.select().from(findings);
     expect(rows).toHaveLength(1);

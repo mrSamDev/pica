@@ -12,6 +12,8 @@ export const outcomeEventSchema = z.object({
   prId: z.string().min(1),
   eventType: z.enum(["comment_created", "comment_resolved", "comment_deleted"]),
   commentId: z.string().min(1),
+  // GitHub delivers a reply as a new comment id; this carries the parent id.
+  inReplyTo: z.string().optional(),
   resolverUser: z.string().optional(),
   content: z.string().optional(),
 });
@@ -24,7 +26,8 @@ export interface OutcomeWebhookDeps {
 }
 
 export async function handleOutcomeEvent(deps: OutcomeWebhookDeps, event: OutcomeEvent & { platform: "github" | "bitbucket" }): Promise<{ handled: boolean }> {
-  const findingId = await findFindingByCommentId(deps.db, event.platform, event.commentId);
+  // A reply's own id is not in posted_comments; resolve via the parent when present.
+  const findingId = (await findFindingByCommentId(deps.db, event.platform, event.commentId)) ?? (event.inReplyTo !== undefined ? await findFindingByCommentId(deps.db, event.platform, event.inReplyTo) : null);
   if (!findingId) {
     // Not one of our comments (another bot or a human's own comment).
     return { handled: false };

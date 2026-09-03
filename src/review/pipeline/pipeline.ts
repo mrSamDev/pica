@@ -12,6 +12,7 @@ import { applyPostFilter } from "../postfilter/postfilter.ts";
 import { buildPrompt } from "../prompts/build.ts";
 import type { Finding, ReviewRequest } from "../types.ts";
 import { chunkDiff } from "./chunk.ts";
+import { withFeedbackFooter } from "./comment.ts";
 import { ensurePattern, fetchPostedCommentId, fetchPriorFindings, fetchSuppressedPatternIds, insertFindings, insertFindingsReturning, insertPostedComment, recordLlmCall, toFindingRow, updateFindingStatus, type FindingRow } from "./queries.ts";
 import { buildSummary, severityOrder } from "./summary.ts";
 
@@ -119,7 +120,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
         const existing = await fetchPostedCommentId(deps.db, request.platform, findingId);
         let commentId = existing;
         if (!commentId) {
-          const comment = await deps.platform.createInlineComment(request.repo, request.prId, { path: finding.filePath, line: finding.lineStart, commitSha: request.commitSha }, finding.message);
+          const comment = await deps.platform.createInlineComment(request.repo, request.prId, { path: finding.filePath, line: finding.lineStart, commitSha: request.commitSha }, withFeedbackFooter(finding));
           commentId = comment.id;
         }
         writes.push({ findingId, status: "posted", commentId });
