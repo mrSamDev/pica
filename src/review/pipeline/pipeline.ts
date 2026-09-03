@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { Config } from "../../config.ts";
 import type { Db } from "../../db/client.ts";
 import { ensureOutcome } from "../../db/outcomes.ts";
-import { emitEvent } from "../../learning/events.ts";
+import { emitEvent } from "../../learning/events/emit.ts";
 import { getReviewLearningContext } from "../../learning/retrieval/retrieval.ts";
 import type { LLMClient } from "../../llm/client.ts";
 import type { Metrics } from "../../observability/metrics.ts";

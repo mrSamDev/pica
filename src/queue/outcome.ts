@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 
 import type { Db } from "../db/client.ts";
 import { ensureOutcome, getOutcome, updateOutcome } from "../db/outcomes.ts";
-import { emitEvent } from "../learning/events.ts";
+import { emitEvent } from "../learning/events/emit.ts";
 import { canTransition, isTerminal, type OutcomeStatus } from "../learning/feedback/state.ts";
 import type { Metrics } from "../observability/metrics.ts";
 

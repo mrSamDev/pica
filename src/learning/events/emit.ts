@@ -1,5 +1,5 @@
-import type { Db } from "../db/client.ts";
-import { learningEvents } from "../db/schema.ts";
+import type { Db } from "../../db/client.ts";
+import { learningEvents } from "../../db/schema.ts";
 
 export interface LearningEvent {
   eventKey: string;

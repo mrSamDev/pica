@@ -14,7 +14,9 @@
     "typecheck": "tsc --noEmit",
     "precommit": "pre-commit run --all-files",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "cli": "node --env-file-if-exists=.env src/cli/main.ts",
+    "rebuild": "node --env-file-if-exists=.env src/cli/main.ts rebuild-read-model"
   },
   "dependencies": {
     "bullmq": "6.3.4",

@@ -235,6 +235,49 @@ describe.skipIf(!dockerAvailable)("learner orchestration", () => {
     expect((await getRule(patternId))?.status).toBe("active");
   });
 
+  it("emits rule.updated snapshot events on state change, not on no-op reruns", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const { patternId, findingId } = await seedPattern(
+      [
+        { severity: "suggestion", outcome: "dismissed" },
+        { severity: "suggestion", outcome: "dismissed" },
+        { severity: "suggestion", outcome: "dismissed" },
+      ],
+      "security:snapshot-pattern",
+    );
+    await runLearner(db, { findingId, repo }, opts(3, 0.9));
+
+    const firstEvents = (await getEvents(patternId)).filter((e) => e.eventType === "rule.updated");
+    expect(firstEvents).toHaveLength(1);
+    // SAFETY: the learner emits rule.updated payloads as RuleSnapshot objects.
+    const firstSnap = firstEvents[0]?.payload as { status: string; evidenceCount: number; evidence: Array<{ findingId: string; outcome: string }> };
+    expect(firstSnap.status).toBe("candidate");
+    expect(firstSnap.evidenceCount).toBe(3);
+    expect(firstSnap.evidence).toHaveLength(3);
+
+    // Same data, no state change: no new rule.updated event.
+    await runLearner(db, { findingId, repo }, opts(3, 0.9));
+    const afterRerun = (await getEvents(patternId)).filter((e) => e.eventType === "rule.updated");
+    expect(afterRerun).toHaveLength(1);
+
+    // New evidence: a second rule.updated event whose snapshot matches the row.
+    const fourth = randomUUID();
+    await db.insert(findings).values({ id: fourth, reviewId: null, repo, prId: randomUUID(), commitSha: "abc", filePath: "src/a.ts", lineStart: 7, lineEnd: 7, category: "security", patternId, severity: "suggestion", message: "snap4", messageHash: "s4", status: "posted" });
+    await db.insert(schema.findingOutcomes).values({ findingId: fourth, status: "dismissed" });
+    await runLearner(db, { findingId: fourth, repo }, opts(3, 0.9));
+
+    const rule = await getRule(patternId);
+    const updated = (await getEvents(patternId)).filter((e) => e.eventType === "rule.updated");
+    expect(updated).toHaveLength(2);
+    // SAFETY: same RuleSnapshot contract as the first event.
+    const snap = updated[updated.length - 1]?.payload as { ruleId: string; status: string; evidenceCount: number; confidence: number; evidence: unknown[] };
+    expect(snap.ruleId).toBe(rule?.id);
+    expect(snap.status).toBe("candidate");
+    expect(snap.evidenceCount).toBe(4);
+    expect(Number(snap.confidence)).toBeCloseTo(6 / 8);
+    expect(snap.evidence).toHaveLength(4);
+  });
+
   it("idempotent: re-running on the same data does not duplicate the rule or events", async () => {
     if (db === undefined) throw new Error("db not initialized");
     const { patternId, findingId } = await seedPattern(

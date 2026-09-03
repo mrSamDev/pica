@@ -1,23 +1,48 @@
+import { createHash } from "node:crypto";
+
 import { chunkDiff } from "../review/pipeline/chunk.ts";
-import type { ReviewDeps } from "../review/pipeline/pipeline.ts";
 import { parseReviewOutput } from "../review/parse/parse.ts";
-import { buildPrompt } from "../review/prompts/build.ts";
+import { buildPrompt, PROMPT_VERSION } from "../review/prompts/build.ts";
 import { computeMetrics, type EvalFinding } from "./metrics.ts";
+import type { LLMClient } from "../llm/client.ts";
+
+// §10 offline eval harness: replay historical PRs against a golden set of
+// human comments and report precision/recall per prompt_version x
+// rules_version — prompt iteration without spamming real PRs.
 
 export interface ReplayCase {
   repo: string;
   prId: string;
   diff: string;
   golden: EvalFinding[];
+  // Learned rules + memory for this repo, threaded into the prompt so the
+  // replay measures the rules the agent would actually run with.
+  rulesText?: string;
+  memoryContext?: string;
+}
+
+export interface ReplayDeps {
+  llm: LLMClient;
 }
 
 export interface ReplayResult {
+  promptVersion: string;
+  rulesVersion: string;
   precision: number;
   recall: number;
-  perCase: Array<{ prId: string; precision: number; recall: number }>;
+  perCase: Array<{ repo: string; prId: string; precision: number; recall: number }>;
 }
 
-export async function runReplay(deps: ReviewDeps, cases: ReplayCase[]): Promise<ReplayResult> {
+// rules_version: deterministic hash over the distinct rule texts this replay
+// ran with. "none" when no rules were in play, so an unlabeled run can never
+// masquerade as a rules run.
+export function computeRulesVersion(rulesTexts: string[]): string {
+  const nonEmpty = [...new Set(rulesTexts.filter((t) => t.length > 0))].sort();
+  if (nonEmpty.length === 0) return "none";
+  return createHash("sha256").update(nonEmpty.join("\n")).digest("hex").slice(0, 12);
+}
+
+export async function runReplay(deps: ReplayDeps, cases: ReplayCase[]): Promise<ReplayResult> {
   const perCase: ReplayResult["perCase"] = [];
 
   for (const c of cases) {
@@ -25,18 +50,24 @@ export async function runReplay(deps: ReviewDeps, cases: ReplayCase[]): Promise<
     const agentFindings: EvalFinding[] = [];
 
     for (const chunk of chunks) {
-      const prompt = buildPrompt({ diff: chunk.raw, repo: c.repo, prId: c.prId });
+      const prompt = buildPrompt({ diff: chunk.raw, repo: c.repo, prId: c.prId, rulesText: c.rulesText, memoryContext: c.memoryContext });
       const raw = await deps.llm.review(prompt);
       const findings = parseReviewOutput(raw);
       agentFindings.push(...findings.map((f) => ({ filePath: f.filePath, lineStart: f.lineStart, lineEnd: f.lineEnd, category: f.category, message: f.message })));
     }
 
     const metrics = computeMetrics(agentFindings, c.golden);
-    perCase.push({ prId: c.prId, precision: metrics.precision, recall: metrics.recall });
+    perCase.push({ repo: c.repo, prId: c.prId, precision: metrics.precision, recall: metrics.recall });
   }
 
   const precision = perCase.reduce((sum, c) => sum + c.precision, 0) / (perCase.length || 1);
   const recall = perCase.reduce((sum, c) => sum + c.recall, 0) / (perCase.length || 1);
 
-  return { precision, recall, perCase };
+  return {
+    promptVersion: PROMPT_VERSION,
+    rulesVersion: computeRulesVersion(cases.map((c) => c.rulesText ?? "")),
+    precision,
+    recall,
+    perCase,
+  };
 }

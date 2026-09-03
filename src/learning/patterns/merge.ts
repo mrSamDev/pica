@@ -2,7 +2,7 @@ import { and, eq } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
 import { findings, patterns, repoRules, ruleEvidence } from "../../db/schema.ts";
-import { emitEvent } from "../events.ts";
+import { emitEvent } from "../events/emit.ts";
 
 // §2, §3: pattern merging. When two patterns turn out to be the same, re-point
 // the write side (findings, rules) at the survivor and mark the loser merged.

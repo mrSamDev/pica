@@ -7,7 +7,7 @@ import { Pool } from "pg";
 
 import * as schema from "../src/db/schema.ts";
 import { learningEvents } from "../src/db/schema.ts";
-import { emitEvent } from "../src/learning/events.ts";
+import { emitEvent } from "../src/learning/events/emit.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
 const dockerAvailable = await isDockerAvailable();

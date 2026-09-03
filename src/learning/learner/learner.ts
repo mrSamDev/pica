@@ -3,8 +3,8 @@ import { and, eq, sql } from "drizzle-orm";
 
 import type { SeverityWeights } from "../../config.ts";
 import type { Db } from "../../db/client.ts";
-import { findings, findingOutcomes, patterns, repoRules, ruleEvidence } from "../../db/schema.ts";
-import { emitEvent } from "../events.ts";
+import { findings, findingOutcomes, patterns, repoRules } from "../../db/schema.ts";
+import { persistRule } from "./persist.ts";
 
 // §5.6 Rule learner: candidate -> confidence -> active.
 // Confidence is a Beta(2,2) posterior mean, not a raw ratio:
@@ -111,86 +111,55 @@ export async function runLearner(db: Db, input: LearnInput, options: LearnerOpti
   const now = new Date();
 
   const existing = await db
-    .select({ id: repoRules.id, status: repoRules.status })
+    .select()
     .from(repoRules)
     .where(and(eq(repoRules.repo, input.repo), eq(repoRules.ruleType, "ignore"), eq(repoRules.patternId, patternId)))
     .limit(1);
 
-  let ruleId = existing[0]?.id ?? null;
-  let previousStatus = existing[0]?.status ?? null;
-
-  if (ruleId === null) {
-    const inserted = await db
-      .insert(repoRules)
-      .values({
-        repo: input.repo,
-        ruleType: "ignore",
-        patternId,
-        payload,
-        payloadHash,
-        status: stage,
-        confidence: String(counts.confidence),
-        evidenceCount: counts.generated,
-        positiveCount: counts.positive,
-        negativeCount: counts.negative,
-        firstObservedAt: now,
-        lastObservedAt: now,
-        createdBy: "auto:learning",
-      })
-      .onConflictDoNothing()
-      .returning({ id: repoRules.id });
-    ruleId = inserted[0]?.id ?? null;
-    if (ruleId === null) {
-      // Another run won the insert; re-fetch to keep going.
-      const refetch = await db
-        .select({ id: repoRules.id, status: repoRules.status })
-        .from(repoRules)
-        .where(and(eq(repoRules.repo, input.repo), eq(repoRules.ruleType, "ignore"), eq(repoRules.patternId, patternId)))
-        .limit(1);
-      ruleId = refetch[0]?.id ?? null;
-      previousStatus = refetch[0]?.status ?? null;
-    }
-  }
-
-  if (ruleId === null) {
-    return { ruleId: null, stage };
-  }
+  const ruleId = existing[0]?.id ?? null;
+  const previousStatus = existing[0]?.status ?? null;
 
   // Never resurrect a retired rule in this phase; decay/retire arrive in Phase 5.
   if (previousStatus === "retired") {
-    await db.update(repoRules).set({ lastObservedAt: now }).where(eq(repoRules.id, ruleId));
+    await db.update(repoRules).set({ lastObservedAt: now }).where(eq(repoRules.id, existing[0]!.id));
     // SAFETY: a retired rule keeps its retired status; stage is informational here.
     return { ruleId, stage: "retired" as RuleStage };
   }
 
   const newStatus = previousStatus === "active" || stage === "active" ? ("active" as const) : ("candidate" as const);
   const statusChanged = previousStatus !== newStatus;
-  // Rule write, activation/candidate event, and evidence links are one atomic
-  // transaction: a crash cannot leave an active rule without its rule.activated
-  // event (which learning_lag depends on) or its evidence links.
-  await db.transaction(async (tx) => {
-    await tx
-      .update(repoRules)
-      .set({ status: newStatus, confidence: String(counts.confidence), evidenceCount: counts.generated, positiveCount: counts.positive, negativeCount: counts.negative, payload, payloadHash, lastObservedAt: now })
-      .where(eq(repoRules.id, ruleId));
 
-    // Only the transition to active emits rule.activated — the learning_lag
-    // contract pins aggregateId `pattern:{uuid}` (§8). Deterministic keys make
-    // re-emission idempotent.
-    if (statusChanged && newStatus === "active") {
-      await emitEvent(tx, { eventKey: `pattern:${patternId}:activated`, repo: input.repo, eventType: "rule.activated", aggregateId: `pattern:${patternId}`, payload: { ruleId } });
-    } else if (statusChanged && newStatus === "candidate") {
-      await emitEvent(tx, { eventKey: `pattern:${patternId}:candidate`, repo: input.repo, eventType: "rule.candidate", aggregateId: `pattern:${patternId}`, payload: { ruleId } });
-    }
+  // §5.9: every rule state change pairs with a rule.updated event carrying a
+  // full snapshot, so the read model rebuilds from the log alone. A retry with
+  // unchanged state (same counts, confidence, payload) writes nothing — no
+  // row update, no event — keeping live rows and rebuilt snapshots in sync.
+  const stateUnchanged =
+    previousStatus !== null &&
+    previousStatus === newStatus &&
+    Number(existing[0]?.confidence) === counts.confidence &&
+    (existing[0]?.evidenceCount ?? 0) === counts.generated &&
+    (existing[0]?.positiveCount ?? 0) === counts.positive &&
+    (existing[0]?.negativeCount ?? 0) === counts.negative &&
+    existing[0]?.payloadHash === payloadHash;
+  if (stateUnchanged) {
+    // SAFETY: newStatus is "candidate" or "active" by construction above.
+    return { ruleId, stage: newStatus as RuleStage };
+  }
 
-    // Audit trail: link each evidence finding to the rule it helped produce.
-    // SAFETY: outcome column is text; the evidence WHERE clause (resolved or
-    // dismissed) already restricted these rows, so the cast is safe.
-    for (const row of evidenceRows) {
-      await tx.insert(ruleEvidence).values({ ruleId, findingId: row.id, outcome: row.status }).onConflictDoNothing();
-    }
+  // One transaction (see persist.ts): rule row + marker event + snapshot +
+  // evidence links become visible together.
+  return persistRule(db, {
+    repo: input.repo,
+    patternId,
+    ruleId,
+    stage,
+    previousStatus,
+    newStatus,
+    statusChanged,
+    payload,
+    payloadHash,
+    counts,
+    evidenceRows,
+    now,
   });
-
-  // SAFETY: newStatus is always "candidate" or "active" here, never "none".
-  return { ruleId, stage: newStatus as RuleStage };
 }
