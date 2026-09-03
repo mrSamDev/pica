@@ -14,6 +14,8 @@ import { addManualRule, retireManualRule } from "../src/learning/rules/manual.ts
 import { mergePatterns } from "../src/learning/patterns/merge.ts";
 import { runLearner } from "../src/learning/learner/learner.ts";
 import { getReviewLearningContext } from "../src/learning/retrieval/retrieval.ts";
+import { selectProbeCandidates } from "../src/learning/retrieval/probes.ts";
+import type { Finding } from "../src/review/types.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
 const dockerAvailable = await isDockerAvailable();
@@ -242,5 +244,46 @@ describe.skipIf(!dockerAvailable)("rebuild read model (§5.9: disposable project
 
     expect(await snapshotRules(db, repo)).toEqual(liveRules);
     expect(await snapshotEvidence(db, repo)).toEqual(liveEvidence);
+  });
+
+  it("§5.7/§5.9: rebuild restores the probe rate-limit from pattern.probed events", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const repo = "rebuild/probe";
+    const patternId = await seedLearnedPattern(repo, "probe-rule", 3);
+    const probeAt = new Date(Date.now() - 5 * 24 * 60 * 60 * 1000);
+    await db.insert(learningEvents).values({
+      eventKey: `pattern:${patternId}:probed:test`,
+      repo,
+      eventType: "pattern.probed",
+      aggregateId: `pattern:${patternId}`,
+      payload: { findingId: randomUUID(), filePath: "src/x/a.ts" },
+      createdAt: probeAt,
+    });
+
+    // A rebuild must not silently reset the probe window: the rate limit is
+    // read from pattern.probed events, so a pattern probed 5 days ago stays
+    // suppressed inside the 30d window instead of being probed again.
+    await rebuildReadModel(db);
+
+    const rule = (await db.select().from(repoRules).where(eq(repoRules.patternId, patternId)))[0];
+    expect(rule?.lastProbedAt).toBeInstanceOf(Date);
+    // SAFETY: lastProbedAt is a Date when present (asserted above); the cast
+    // narrows the optional for the comparison only.
+    expect(((rule?.lastProbedAt as Date | undefined)?.getTime() ?? 0) / 1000).toBeCloseTo(probeAt.getTime() / 1000, 0);
+
+    // Behavioral: a new-glob re-flag stays suppressed (no second probe) within
+    // the window, exactly as it would have before the rebuild.
+    const candidate: Finding = {
+      filePath: "src/brand_new_dir/f.ts",
+      lineStart: 1,
+      lineEnd: 1,
+      category: "security",
+      patternId: "security:probe-rule",
+      patternUuid: patternId,
+      severity: "warning",
+      message: "re-flag",
+    };
+    const probes = await selectProbeCandidates(db, { probeIntervalDays: 30 }, new Date(), [candidate]);
+    expect(probes).toHaveLength(0);
   });
 });

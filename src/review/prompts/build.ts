@@ -1,3 +1,5 @@
+import { CATEGORIES } from "../../learning/taxonomy/taxonomy.ts";
+
 export const PROMPT_VERSION = "v1";
 
 export interface BuildPromptInput {
@@ -30,6 +32,7 @@ export function buildPrompt(input: BuildPromptInput): string {
     `- Review only added (+) lines.`,
     `- Ignore style, formatting, and naming.`,
     `- severity is one of: error, warning, suggestion.`,
+    `- category is one of: ${CATEGORIES.join(", ")}.`,
     `- patternId is a stable canonical key like "security:jwt-expiration".`,
   ];
 

@@ -111,7 +111,11 @@ async function selectFindingsToPoll(db: Db, from: Date, to: Date): Promise<Polla
 export function classifyCommentState(state: CommentState, ageHours: number): OutcomeStatus | null {
   if (state.deleted) return "dismissed";
   if (state.resolved) return "resolved";
-  if (state.replyCount > 0) return "replied";
+  // A reply is a leading indicator, not a terminal outcome. Once a comment
+  // reaches the 7d no-signal window, close it to inconclusive even if it has
+  // replies — otherwise a replied finding is re-classified \"replied\" (which
+  // the state machine rejects as a replied->replied no-op) and never closes.
   if (ageHours >= 168) return "inconclusive";
+  if (state.replyCount > 0) return "replied";
   return null;
 }

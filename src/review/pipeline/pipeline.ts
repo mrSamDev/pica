@@ -4,18 +4,18 @@ import type { Config } from "../../config.ts";
 import type { Db } from "../../db/client.ts";
 import { ensureOutcome } from "../../db/outcomes.ts";
 import { emitEvent } from "../../learning/events/emit.ts";
-import { getReviewLearningContext } from "../../learning/retrieval/retrieval.ts";
+import { getReviewLearningContext, RETRIEVAL_VERSION, computeRulesVersion } from "../../learning/retrieval/retrieval.ts";
 import { selectProbeCandidates } from "../../learning/retrieval/probes.ts";
 import type { LLMClient } from "../../llm/client.ts";
 import type { Metrics } from "../../observability/metrics.ts";
 import type { PlatformClient } from "../../platform/types.ts";
 import { parseReviewOutput } from "../parse/parse.ts";
 import { applyPostFilter } from "../postfilter/postfilter.ts";
-import { buildPrompt } from "../prompts/build.ts";
+import { buildPrompt, PROMPT_VERSION } from "../prompts/build.ts";
 import type { Finding, ReviewRequest } from "../types.ts";
 import { chunkDiff } from "./chunk.ts";
 import { withFeedbackFooter } from "./comment.ts";
-import { ensurePattern, fetchPostedCommentId, fetchPriorFindings, insertFindings, insertFindingsReturning, insertPostedComment, recordLlmCall, toFindingRow, updateFindingStatus, type FindingRow } from "./queries.ts";
+import { ensurePattern, fetchPostedCommentId, fetchPriorFindings, insertFindings, insertFindingsReturning, insertPostedComment, recordLlmCall, recordReviewRepro, toFindingRow, updateFindingStatus, type FindingRow } from "./queries.ts";
 import { buildSummary, severityOrder } from "./summary.ts";
 
 export interface ReviewDeps {
@@ -66,6 +66,16 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
   if (request.mode === "dry-run") {
     return { findings: allFindings, posted: 0 };
   }
+
+  // §3 reproducibility: record which model, prompt, rules and retrieval version
+  // produced this review. After the dry-run (which writes nothing) and before
+  // any posting, so a crash leaves the row with its versions + status=failed.
+  await recordReviewRepro(deps.db, request.reviewId, {
+    model: deps.config.LLM_MODEL,
+    promptVersion: PROMPT_VERSION,
+    rulesVersion: computeRulesVersion([learningContext.rulesText || ""]),
+    retrievalVersion: RETRIEVAL_VERSION,
+  });
 
   const [priorFindings, existingComments] = await Promise.all([fetchPriorFindings(deps.db, request.repo, request.prId, request.commitSha), deps.platform.listComments(request.repo, request.prId)]);
 
@@ -149,6 +159,11 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
       if (!commentId) {
         const comment = await deps.platform.createInlineComment(request.repo, request.prId, { path: finding.filePath, line: finding.lineStart, commitSha: request.commitSha }, withFeedbackFooter(finding));
         commentId = comment.id;
+        // Persist the comment link immediately, not in the final batched
+        // transaction: if a later post in this loop throws, the worker retry
+        // reuses this stored id instead of re-posting an identical comment.
+        await insertPostedComment(deps.db, findingId, request.platform, commentId);
+        await ensureOutcome(deps.db, findingId, "posted");
       }
       writes.push({ findingId, status: "posted", commentId });
       if (isProbe) {

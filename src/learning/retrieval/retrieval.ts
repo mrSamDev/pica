@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
@@ -6,6 +7,24 @@ import { findings, patterns, repoRules } from "../../db/schema.ts";
 // §5.8 Read model. Retrieval excludes dismissed patterns (deterministic
 // suppression) and renders active rules into the prompt's REPO RULES section.
 // The post-filter is the hard enforcer; the prompt is the soft layer.
+
+// §3 / §13: distinguishes retrieval strategies (V1 taxonomy/pattern vs V2
+// embeddings) so §5.7 quasi-experiments can compare dismissal rates across a
+// switch. A content hash would churn on every review and couldn't express the
+// strategy flip; exact-bytes reproducibility lives in `llm_calls.prompt_hash`.
+// Bump only when the retrieval logic changes shape.
+export const RETRIEVAL_VERSION = "v1";
+
+// rules_version: deterministic fingerprint over the rendered rules actually
+// injected into a prompt (or the replay's rules). "none" when no rules were
+// in play, so an unlabeled run can never masquerade as a rules run. Shared by
+// the review pipeline and the eval harness so their rules_version labels are
+// comparable (§10).
+export function computeRulesVersion(rulesTexts: string[]): string {
+  const nonEmpty = [...new Set(rulesTexts.filter((t) => t.length > 0))].sort();
+  if (nonEmpty.length === 0) return "none";
+  return createHash("sha256").update(nonEmpty.join("\n")).digest("hex").slice(0, 12);
+}
 
 export interface ReviewLearningContext {
   rulesText: string;

@@ -1,8 +1,7 @@
-import { createHash } from "node:crypto";
-
 import { chunkDiff } from "../review/pipeline/chunk.ts";
 import { parseReviewOutput } from "../review/parse/parse.ts";
 import { buildPrompt, PROMPT_VERSION } from "../review/prompts/build.ts";
+import { computeRulesVersion } from "../learning/retrieval/retrieval.ts";
 import { computeMetrics, type EvalFinding } from "./metrics.ts";
 import type { LLMClient } from "../llm/client.ts";
 
@@ -33,14 +32,8 @@ export interface ReplayResult {
   perCase: Array<{ repo: string; prId: string; precision: number; recall: number }>;
 }
 
-// rules_version: deterministic hash over the distinct rule texts this replay
-// ran with. "none" when no rules were in play, so an unlabeled run can never
-// masquerade as a rules run.
-export function computeRulesVersion(rulesTexts: string[]): string {
-  const nonEmpty = [...new Set(rulesTexts.filter((t) => t.length > 0))].sort();
-  if (nonEmpty.length === 0) return "none";
-  return createHash("sha256").update(nonEmpty.join("\n")).digest("hex").slice(0, 12);
-}
+// rules_version fingerprint lives in learning/retrieval/retrieval.ts (shared
+// with the review pipeline so eval and production labels are comparable).
 
 export async function runReplay(deps: ReplayDeps, cases: ReplayCase[]): Promise<ReplayResult> {
   const perCase: ReplayResult["perCase"] = [];

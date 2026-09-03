@@ -74,6 +74,20 @@ describe.skipIf(!dockerAvailable)("feedback poller", () => {
     }
   });
 
+  it("poller closes a reply that never resolves: a replied comment is inconclusive at the 7d poll", async () => {
+    if (pool === undefined || db === undefined) throw new Error("setup not initialized");
+    const _repliedId = await seedFinding("c-replied-7d", new Date(Date.now() - 167.5 * 60 * 60 * 1000));
+    // Replied at 7d with no terminal outcome: closes to inconclusive, not a
+    // second \"replied\" no-op that would leave it non-terminal forever.
+    const states = new Map<string, CommentState>([["c-replied-7d", { resolved: false, deleted: false, replyCount: 2 }]]);
+    const platform: CommentStateFetcher = {
+      getCommentState: async (_repo, _pr, commentId) => states.get(commentId) ?? { resolved: false, deleted: false, replyCount: 0 },
+    };
+    const { jobs, queue } = makeQueue();
+    await pollFeedback({ pool, db, platform, queue });
+    expect(jobs.map((j) => j.to)).toContain("inconclusive");
+  });
+
   it("poller observes terminal outcomes: resolved / dismissed / replied / inconclusive", async () => {
     if (pool === undefined || db === undefined) throw new Error("setup not initialized");
     const resolvedId = await seedFinding("c-resolved", new Date(Date.now() - 30 * 60 * 1000));
@@ -105,6 +119,12 @@ describe.skipIf(!dockerAvailable)("feedback poller", () => {
     expect(classifyCommentState({ resolved: false, deleted: true, replyCount: 0 }, 1)).toBe("dismissed");
     expect(classifyCommentState({ resolved: false, deleted: false, replyCount: 1 }, 1)).toBe("replied");
     expect(classifyCommentState({ resolved: false, deleted: false, replyCount: 0 }, 168)).toBe("inconclusive");
+    // A replied comment at 7d closes to inconclusive rather than staying open
+    // forever: the leading indicator is not a terminal outcome, so the poller
+    // must not report it as \"replied\" (which the state machine rejects as a
+    // no-op). At 1d the reply is still a leading indicator.
+    expect(classifyCommentState({ resolved: false, deleted: false, replyCount: 2 }, 168)).toBe("inconclusive");
+    expect(classifyCommentState({ resolved: false, deleted: false, replyCount: 2 }, 24)).toBe("replied");
     expect(classifyCommentState({ resolved: false, deleted: false, replyCount: 0 }, 1)).toBeNull();
   });
 });

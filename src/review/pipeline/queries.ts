@@ -175,6 +175,33 @@ export async function fetchSuppressedPatternIds(db: Db, repo: string): Promise<S
 export async function updateReviewStatus(db: Db, reviewId: string, status: string, error?: string): Promise<void> {
   await db
     .update(reviews)
-    .set({ status, error, completedAt: status === "done" || status === "failed" ? new Date() : undefined })
+    .set({
+      status,
+      error,
+      startedAt: status === "running" ? new Date() : undefined,
+      completedAt: status === "done" || status === "failed" ? new Date() : undefined,
+    })
+    .where(eq(reviews.id, reviewId));
+}
+
+// §3 reproducibility: record exactly which model, prompt version, rules and
+// retrieval version produced a review, so "why did the bot decide this" stays
+// answerable months later. Enqueued-but-never-processed reviews keep NULLs.
+export interface ReviewRepro {
+  model: string;
+  promptVersion: string;
+  rulesVersion: string;
+  retrievalVersion: string;
+}
+
+export async function recordReviewRepro(db: Db, reviewId: string, repro: ReviewRepro): Promise<void> {
+  await db
+    .update(reviews)
+    .set({
+      model: repro.model,
+      promptVersion: repro.promptVersion,
+      rulesVersion: repro.rulesVersion,
+      retrievalVersion: repro.retrievalVersion,
+    })
     .where(eq(reviews.id, reviewId));
 }

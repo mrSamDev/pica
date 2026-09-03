@@ -40,6 +40,10 @@ export interface ReplayedRule {
   createdAt: Date;
   createdBy: string;
   deactivatedAt: Date | null;
+  // §5.7 rate-limit state. Not part of the fold (probe events are read
+  // separately by the rebuild); the fold produces null and the rebuild fills
+  // it from pattern.probed events so a rebuild never resets the probe window.
+  lastProbedAt: Date | null;
 }
 
 export interface FoldResult {
@@ -64,6 +68,12 @@ const SNAPSHOT_EVENT_TYPES = new Set(["rule.updated", "rule.manual_added"]);
 const mergePayloadSchema = z.object({ mergedInto: z.string() });
 const retireMarkerSchema = z.object({ ruleId: z.string(), retiredBy: z.string().optional(), reason: z.string().nullable().optional(), retiredAt: z.iso.datetime() });
 const decayMarkerSchema = z.object({ ruleId: z.string(), decayedAt: z.iso.datetime(), priorConfidence: z.number().nullable().optional() });
+
+// Exposed so a rebuild can attribute pattern-scoped events (e.g. ε-probe rate
+// limits) to the survivor of a merge the same way the fold does.
+export function buildPatternMergeMap(events: EventInput[]): Map<string, string> {
+  return resolveMerges(events.filter((e) => e.eventType === "pattern.merged"));
+}
 
 function resolveMerges(mergeEvents: EventInput[]): Map<string, string> {
   const direct = new Map<string, string>();
@@ -131,6 +141,7 @@ function toRule(snapshot: RuleSnapshot, mergeMap: Map<string, string>, retire: R
     createdAt: new Date(snapshot.createdAt),
     createdBy: snapshot.createdBy,
     deactivatedAt: isRetired ? new Date((retire?.retiredAt ?? decay?.decayedAt)!) : null,
+    lastProbedAt: null,
   };
 }
 

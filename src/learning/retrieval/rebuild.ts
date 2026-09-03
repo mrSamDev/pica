@@ -1,6 +1,8 @@
+import { eq } from "drizzle-orm";
+
 import type { Db } from "../../db/client.ts";
 import { learningEvents, repoRules, ruleEvidence } from "../../db/schema.ts";
-import { projectEvents, type EventInput } from "../events/replay.ts";
+import { buildPatternMergeMap, projectEvents, type EventInput } from "../events/replay.ts";
 
 // §5.9 rebuild-read-model: repo_rules + rule_evidence are a disposable
 // projection. Delete them, replay the immutable learning_events log, and the
@@ -22,12 +24,36 @@ export interface RebuildResult {
   events: number;
 }
 
+async function lastProbedAtBySurvivor(db: Db, mergeMap: Map<string, string>): Promise<Map<string, Date>> {
+  const probes = await db.select({ aggregateId: learningEvents.aggregateId, createdAt: learningEvents.createdAt }).from(learningEvents).where(eq(learningEvents.eventType, "pattern.probed"));
+  const byPattern = new Map<string, Date>();
+  for (const probe of probes) {
+    if (probe.createdAt === null) continue;
+    const from = probe.aggregateId.replace(/^pattern:/, "");
+    const survivor = mergeMap.get(from) ?? from;
+    const existing = byPattern.get(survivor);
+    if (existing === undefined || probe.createdAt > existing) {
+      byPattern.set(survivor, probe.createdAt);
+    }
+  }
+  return byPattern;
+}
+
 export async function rebuildReadModel(db: Db): Promise<RebuildResult> {
   const events = await db.select({ eventType: learningEvents.eventType, aggregateId: learningEvents.aggregateId, repo: learningEvents.repo, payload: learningEvents.payload }).from(learningEvents);
 
   // SAFETY: the selected columns match EventInput's shape exactly
   // (eventType, aggregateId, repo, payload).
   const { rules, evidenceByRule } = projectEvents(events as EventInput[]);
+  // §5.7: keep the probe rate-limit across a rebuild by attributing
+  // pattern.probed events (post-merge) to each rebuilt rule.
+  // SAFETY: the same selected EventInput shape flows into buildPatternMergeMap.
+  const probeTimes = await lastProbedAtBySurvivor(db, buildPatternMergeMap(events as EventInput[]));
+  for (const rule of rules) {
+    if (rule.patternId !== null) {
+      rule.lastProbedAt = probeTimes.get(rule.patternId) ?? null;
+    }
+  }
 
   await db.transaction(async (tx) => {
     // rule_evidence first: its rule_id FK has no ON DELETE cascade.
@@ -57,6 +83,7 @@ export async function rebuildReadModel(db: Db): Promise<RebuildResult> {
           createdAt: rule.createdAt,
           createdBy: rule.createdBy,
           deactivatedAt: rule.deactivatedAt,
+          lastProbedAt: rule.lastProbedAt,
         })
         .onConflictDoNothing();
     }

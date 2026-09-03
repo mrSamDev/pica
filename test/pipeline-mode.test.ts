@@ -291,4 +291,47 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     expect(commentIds).toHaveLength(3);
     expect(commentIds.every((c) => c.commentId !== "")).toBe(true);
   });
+
+  it("§4: a partial platform post failure persists already-posted links so a retry never duplicates", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const reviewId = randomUUID();
+    const prId = "50";
+    await seedReview(reviewId, "post");
+    const inputFindings = makeFindings(3);
+
+    // Attempt 1: the platform posts finding 0, then the post for finding 1
+    // throws (severity order posts error, warning, suggestion).
+    let calls = 0;
+    const attempt1: Array<{ content: string }> = [];
+    const platform: PlatformClient = {
+      fetchDiff: async () => DIFF,
+      listComments: async () => [],
+      createPrComment: async () => ({ id: `p-${++commentSeq}` }),
+      getCommentState: async () => ({ resolved: false, deleted: false, replyCount: 0 }),
+      async createInlineComment(_repo, _prId, _target, content) {
+        calls++;
+        if (calls === 2) throw new Error("platform down");
+        attempt1.push({ content });
+        return { id: `i-${++commentSeq}` };
+      },
+    };
+    await expect(runReview({ db, platform, llm: makeLlm(inputFindings), config, metrics: createFakeMetrics() }, makeRequest(reviewId, prId, "post"))).rejects.toThrow("platform down");
+    expect(attempt1).toHaveLength(1); // finding 0 posted, finding 1 post failed
+
+    // Retry on a healthy platform. The already-posted finding 0 link must be
+    // reused from the DB, so only the two un-posted findings get fresh posts.
+    const { platform: platform2, inline: inline2 } = makePlatform();
+    const result = await runReview({ db, platform: platform2, llm: makeLlm(inputFindings), config, metrics: createFakeMetrics() }, makeRequest(reviewId, prId, "post"));
+    expect(result.posted).toBe(3);
+    expect(inline2).toHaveLength(2); // finding 0 reused, not re-posted
+
+    const rows = await db.select().from(findings).where(eq(findings.prId, prId));
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.status === "posted")).toBe(true);
+    // No comment body appears twice across both attempts.
+    const contents = [...attempt1, ...inline2].map((c) => c.content);
+    for (const content of contents) {
+      expect(contents.filter((c) => c === content)).toHaveLength(1);
+    }
+  });
 });
