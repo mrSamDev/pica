@@ -44,3 +44,4 @@
 - [x] One serialized outcome queue proven (no race) — `test/outcome-queue.test.ts` (concurrent webhook+poller writes land on a valid terminal state)
 - [x] Dashboard outcomes view tested — `test/dashboard.test.ts` ("shows outcomes") + `test/dashboard-projection.test.ts` (GROUP BY counts)
 - [x] §5.12 protocol is real end-to-end: posted comments carry the `dismiss: <reason>` footer (`test/comment.test.ts`, `test/e2e.test.ts`), and reply events attribute via `in_reply_to` when the reply id is not ours (`test/outcome-queue.test.ts`)
+- [ ] Comment hygiene — src comments explain _why_, never restate code; no decorative/duplicated comments (gate: phase-6 TDD list item 7).

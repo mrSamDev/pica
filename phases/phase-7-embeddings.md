@@ -30,3 +30,4 @@
 - [ ] Retrieval problem documented (the case that motivated it)
 - [ ] Semantic-vs-taxonomy eval shows semantic wins
 - [ ] No pgvector installed before the gate
+- [ ] Comment hygiene — src comments explain _why_, never restate code; no decorative/duplicated comments (gate: phase-6 TDD list item 7).

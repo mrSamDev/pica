@@ -8,7 +8,7 @@ import { Pool } from "pg";
 
 import { loadConfig } from "../src/config.ts";
 import * as schema from "../src/db/schema.ts";
-import { findings, patterns, postedComments, repoRules, reviews } from "../src/db/schema.ts";
+import { findings, learningEvents, patterns, postedComments, repoRules, reviews } from "../src/db/schema.ts";
 import type { LLMClient } from "../src/llm/client.ts";
 import type { PlatformClient } from "../src/platform/types.ts";
 import { runReview } from "../src/review/pipeline/pipeline.ts";
@@ -225,6 +225,32 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]?.status).toBe("suppressed");
     expect(rows[0]?.patternId).toBe(patternUuid);
+  });
+
+  it("H2: a manual glob ignore rule suppresses findings under the glob, persists suppressed, and never probes", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const reviewId = "88888888-8888-8888-8888-888888888888";
+    await seedReview(reviewId, "post");
+
+    // Manual ignore rule scoped to a glob, no pattern id.
+    await db.insert(repoRules).values({ repo: "owner/repo", ruleType: "ignore", patternId: null, glob: "generated/**", payload: { reason: "build output" }, payloadHash: "h", status: "active" });
+
+    const finding: Finding = { filePath: "generated/out.js", lineStart: 1, lineEnd: 1, category: "correctness", patternId: "correctness:dead-code", patternUuid: "", severity: "warning", message: "unused variable" };
+    const { platform, inline } = makePlatform();
+    const result = await runReview({ db, platform, llm: makeLlm([finding]), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "51", "post"));
+
+    // The finding was dropped by the glob rule and persisted, not posted, and
+    // the glob path was NOT promoted to an ε-probe (manual ignores own the
+    // path; probing it would defeat the human override).
+    expect(result.posted).toBe(0);
+    expect(inline).toHaveLength(0);
+    const rows = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.status).toBe("suppressed");
+    expect(rows[0]?.filePath).toBe("generated/out.js");
+
+    const probes = await db.select().from(learningEvents).where(eq(learningEvents.eventType, "pattern.probed"));
+    expect(probes).toHaveLength(0);
   });
 
   it("identity seam: real DB pattern resolution drives cross-commit dedup", async () => {

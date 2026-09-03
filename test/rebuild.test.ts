@@ -142,7 +142,8 @@ describe.skipIf(!dockerAvailable)("rebuild read model (§5.9: disposable project
 
     const contextAfter = await getReviewLearningContext(db, repo);
     expect(contextAfter.rulesText).toBe(contextBefore.rulesText);
-    expect(contextAfter.suppressedPatternIds).toEqual(contextBefore.suppressedPatternIds);
+    expect([...contextAfter.suppression.patternIds].sort()).toEqual([...contextBefore.suppression.patternIds].sort());
+    expect(contextAfter.suppression.globs).toEqual(contextBefore.suppression.globs);
 
     // Second rebuild is a no-op by construction.
     const second = await rebuildReadModel(db);

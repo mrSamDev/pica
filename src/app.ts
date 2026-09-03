@@ -26,9 +26,10 @@ export interface AppDeps {
   llm: LLMClient;
   dashboardQueries: DashboardQueries;
   metrics: Metrics;
-  // Computes learning_lag from the event log; null when no rule has activated.
+  // learning_lag from the event log (null before any rule activates) and the
+  // rolling-30d dismissal rate (null before decisive outcomes) — same getters
+  // observability/routes.ts registers on /metrics.
   getLearningLag: () => Promise<number | null>;
-  // Computes the rolling-30d dismissal rate; null before decisive outcomes.
   getDismissalRate: () => Promise<number | null>;
   // Basic auth for the operational endpoints; empty in dev disables it.
   auth: BasicAuthConfig;

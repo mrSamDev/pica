@@ -85,11 +85,19 @@ describe.skipIf(!dockerAvailable)("read model: retrieval + renderRules", () => {
     await db.insert(findings).values({ id: randomUUID(), reviewId: null, repo, prId: "2", commitSha: "a", filePath: "src/b.ts", lineStart: 1, lineEnd: 1, category: "performance", patternId: keptPatternId, severity: "warning", message: "N+1 query", messageHash: "h2", status: "posted" });
 
     const ctx: ReviewLearningContext = await getReviewLearningContext(db, repo);
-    expect(ctx.suppressedPatternIds.has(suppressedPatternId)).toBe(true);
-    expect(ctx.suppressedPatternIds.has(keptPatternId)).toBe(false);
+    expect(ctx.suppression.patternIds.has(suppressedPatternId)).toBe(true);
+    expect(ctx.suppression.patternIds.has(keptPatternId)).toBe(false);
     expect(ctx.rulesText).toContain("security:jwt-expiration");
     // Memory context keeps the non-suppressed pattern, drops the dismissed one.
     expect(ctx.memoryContext).toContain("performance:n-plus-1");
     expect(ctx.memoryContext).not.toContain("security:jwt-expiration");
+  });
+
+  it("H2: a manual glob ignore rule (patternId null) lands in suppression.globs", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    await db.insert(repoRules).values({ repo, ruleType: "ignore", patternId: null, glob: "generated/**", payload: { reason: "build output" }, payloadHash: "h", status: "active", createdBy: "manual:cli" });
+
+    const ctx: ReviewLearningContext = await getReviewLearningContext(db, repo);
+    expect(ctx.suppression.globs).toContain("generated/**");
   });
 });

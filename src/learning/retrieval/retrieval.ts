@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
+import type { SuppressionRules } from "../../review/types.ts";
 import { findings, patterns, repoRules } from "../../db/schema.ts";
 
 // §5.8 Read model. Retrieval excludes dismissed patterns (deterministic
@@ -29,7 +30,7 @@ export function computeRulesVersion(rulesTexts: string[]): string {
 export interface ReviewLearningContext {
   rulesText: string;
   memoryContext: string;
-  suppressedPatternIds: Set<string>;
+  suppression: SuppressionRules;
 }
 
 // Display fields written by the learner (patternKey/reason) and manual rule
@@ -77,13 +78,23 @@ export async function getReviewLearningContext(db: Db, repo: string): Promise<Re
     .where(and(eq(repoRules.repo, repo), eq(repoRules.status, "active")));
   const rulesText = renderRules(activeRules);
 
-  const suppressedPatternIds = new Set<string>();
+  // Deterministic suppression the post-filter enforces. Learner-created ignore
+  // rules suppress a pattern everywhere (patternId set, glob null); manual
+  // ignore rules suppress a path (glob set, patternId null). The protected
+  // category exemption lives in the post-filter, not here.
+  const patternIds = new Set<string>();
+  const globs: string[] = [];
   for (const rule of activeRules) {
-    if (rule.ruleType === "ignore" && rule.patternId) suppressedPatternIds.add(rule.patternId);
+    if (rule.ruleType !== "ignore") continue;
+    if (rule.glob !== null) {
+      globs.push(rule.glob);
+    } else if (rule.patternId) {
+      patternIds.add(rule.patternId);
+    }
   }
 
-  const memoryContext = await buildMemoryContext(db, repo, suppressedPatternIds);
-  return { rulesText, memoryContext, suppressedPatternIds };
+  const memoryContext = await buildMemoryContext(db, repo, patternIds);
+  return { rulesText, memoryContext, suppression: { patternIds, globs } };
 }
 
 // Compact memory of patterns the repo has flagged before, excluding any pattern

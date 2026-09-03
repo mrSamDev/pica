@@ -31,6 +31,7 @@
 - [x] Observe mode integration test green (findings recorded, no comments) — `test/pipeline-mode.test.ts` (observe mode records findings but does not post; dry-run posts nothing)
 - [x] Summary cap + severity priority tested — `test/summary.test.ts` + `src/review/pipeline/summary.ts` (`buildSummary`, `SUMMARY_CAP`)
 - [x] Per-repo mode/cap config tested — `test/config.test.ts` (per-repo override wins) + `src/config.ts` (`getRepoConfig`, `REPO_CONFIG`)
+- [ ] Comment hygiene — src comments explain _why_, never restate code; no decorative/duplicated comments (gate: phase-6 TDD list item 7).
 
 ### Manual (needs real platform + LLM tokens)
 

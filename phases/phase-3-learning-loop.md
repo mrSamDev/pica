@@ -48,3 +48,4 @@
 - [x] Severity weighting math tested — `test/learner.test.ts`, `test/learning-signals.test.ts`
 - [x] Dashboard rules/learning view tested — `test/dashboard.test.ts`, `test/dashboard-projection.test.ts` (`/api/rules`, learning panel counts + lag)
 - [x] Dashboard why-disappeared drill-down tested — `test/dashboard.test.ts`, `test/dashboard-projection.test.ts` (`/api/why?findingId=`)
+- [ ] Comment hygiene — src comments explain _why_, never restate code; no decorative/duplicated comments (gate: phase-6 TDD list item 7).

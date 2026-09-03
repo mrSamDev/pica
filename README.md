@@ -52,7 +52,9 @@ pnpm dev             # --watch, loads .env if present
 ```
 
 Required env vars (no defaults — fail fast on boot): `DATABASE_URL`,
-`REDIS_URL`, `WEBHOOK_SECRET`, `LLM_API_KEY`, `PLATFORM_TOKEN`. Set
+`REDIS_URL`, `WEBHOOK_SECRET`, `LLM_API_KEY`. Platform auth needs exactly one
+path: `PLATFORM_TOKEN` (a fine-grained PAT), or a GitHub App via
+`GITHUB_APP_ID` + `GITHUB_INSTALLATION_ID` + `GITHUB_APP_PRIVATE_KEY`. Set
 `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` for the dashboard + `/metrics`.
 
 ## Run (Docker)
@@ -86,7 +88,10 @@ TDD throughout — every behavior has a test written before its code. The
 learning loop (dismiss 3× → rule forms → future review excludes it), rebuild
 convergence, falsifiability, and guardrail tests are first-class. Load tests
 enqueue a burst and verify no review job is lost; `safeFetch` is tested against
-oversized diff responses. See `phases/` for the per-phase red → green lists.
+oversized diff responses. A comment-hygiene gate
+(`test/comment-hygiene.test.ts`) scans `src/` for duplicated, decorative, or
+code-echo comments, the same way the `no console.log` guard is enforced. See
+`phases/` for the per-phase red → green lists.
 
 ## CLI
 

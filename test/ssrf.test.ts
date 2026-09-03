@@ -74,4 +74,17 @@ describe("ssrf", () => {
     const five = async () => jsonResponse('{"error":"upstream"}', { status: 502 });
     await expect(safeFetch("https://api.github.com/repos/x", { allowedHosts: allowed, maxBytes: 1000, fetchImpl: five })).rejects.toThrow(/status 502/);
   });
+
+  it("aborts a hung fetch after timeoutMs (H3)", async () => {
+    const fetchImpl = async (_input: string | Request | URL, init?: RequestInit) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(new Error("aborted by timeout")));
+      });
+    await expect(safeFetch("https://api.github.com/repos/x", { allowedHosts: allowed, maxBytes: 1000, timeoutMs: 30, fetchImpl })).rejects.toThrow(/timed out/i);
+  });
+
+  it("a successful response clears the timeout timer and returns the body", async () => {
+    const fetchImpl = async () => jsonResponse("ok");
+    await expect(safeFetch("https://api.github.com/repos/x", { allowedHosts: allowed, maxBytes: 1000, timeoutMs: 1000, fetchImpl })).resolves.toBe("ok");
+  });
 });

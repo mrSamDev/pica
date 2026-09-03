@@ -15,6 +15,7 @@ import { getDismissalRate30d } from "./learning/metrics.ts";
 import { decayStaleRules } from "./learning/learner/decay.ts";
 import { createBitbucketClient } from "./platform/bitbucket.ts";
 import { createGitHubClient } from "./platform/github.ts";
+import { createPlatformTokenProvider } from "./platform/token.ts";
 import { pollFeedback } from "./platform/poll.ts";
 import { createRedisConnection } from "./queue/connection.ts";
 import { createOutcomeWorker } from "./queue/outcome.ts";
@@ -38,7 +39,11 @@ const jobOptions = {
 const queue = new Queue("reviews", { connection: redis, defaultJobOptions: jobOptions });
 const outcomeQueue = new Queue("outcomes", { connection: redis, defaultJobOptions: jobOptions });
 const allowedHosts = new Set(config.ALLOWED_HOSTS);
-const platform = config.PLATFORM === "github" ? createGitHubClient({ token: config.PLATFORM_TOKEN, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES }) : createBitbucketClient({ token: config.PLATFORM_TOKEN, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES });
+const platformTokenProvider = createPlatformTokenProvider(config);
+const platform =
+  config.PLATFORM === "github"
+    ? createGitHubClient({ tokenProvider: platformTokenProvider, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES, timeoutMs: config.PLATFORM_TIMEOUT_MS })
+    : createBitbucketClient({ tokenProvider: platformTokenProvider, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES, timeoutMs: config.PLATFORM_TIMEOUT_MS });
 const llm = createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS });
 const reviewDeps = { db, platform, llm, config, metrics };
 const worker = createReviewWorker(redis, reviewDeps, logger);
@@ -88,6 +93,7 @@ const pollTimer = setInterval(
       pool,
       db,
       platform,
+      logger,
       queue: {
         enqueue: async (job) => {
           await outcomeQueue.add("outcome", job);

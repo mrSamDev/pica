@@ -57,6 +57,7 @@
 - [x] Dashboard shows live reviews + findings + system health + recent activity — `test/dashboard.test.ts` (17–21)
 - [x] All SSRF + HMAC security tests green — `test/ssrf.test.ts` (5–8), `test/webhooks.test.ts` (1–4)
 - [x] No `console.log` in `src/` — enforced by oxlint `no-console`
+- [ ] Comment hygiene — src comments explain _why_, never restate code; no decorative/duplicated comments (gate: phase-6 TDD list item 7).
 
 ### Manual (needs real platform + LLM tokens)
 

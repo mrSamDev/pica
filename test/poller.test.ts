@@ -74,6 +74,30 @@ describe.skipIf(!dockerAvailable)("feedback poller", () => {
     }
   });
 
+  it("poller skips a comment whose state fetch fails transiently (H1): no fake dismissal, batch continues", async () => {
+    if (pool === undefined || db === undefined) throw new Error("setup not initialized");
+    // c-fails is 0.5h old (picked up in the 1h batch) and its platform fetch throws.
+    // It must be skipped — not classified as deleted/dismissed — and the healthy
+    // comment in the same batch must still be processed.
+    const failsFinding = await seedFinding("c-fails", new Date(Date.now() - 30 * 60 * 1000));
+    const okFinding = await seedFinding("c-ok", new Date(Date.now() - 30 * 60 * 1000));
+    const states = new Map<string, CommentState>([["c-ok", { resolved: false, deleted: true, replyCount: 0 }]]);
+    const platform: CommentStateFetcher = {
+      getCommentState: async (_repo, _pr, commentId) => {
+        if (commentId === "c-fails") throw new Error("502 upstream");
+        return states.get(commentId)!;
+      },
+    };
+    const { jobs, queue } = makeQueue();
+    await pollFeedback({ pool, db, platform, queue });
+
+    // Only the healthy comment produced a job; the failing one was skipped.
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]!.findingId).toBe(okFinding);
+    expect(jobs[0]!.to).toBe("dismissed");
+    expect(jobs.map((j) => j.findingId)).not.toContain(failsFinding);
+  });
+
   it("poller closes a reply that never resolves: a replied comment is inconclusive at the 7d poll", async () => {
     if (pool === undefined || db === undefined) throw new Error("setup not initialized");
     const _repliedId = await seedFinding("c-replied-7d", new Date(Date.now() - 167.5 * 60 * 60 * 1000));

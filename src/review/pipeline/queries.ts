@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
-import { findings, llmCalls, patterns, postedComments, repoRules, reviews } from "../../db/schema.ts";
+import { findings, llmCalls, patterns, postedComments, reviews } from "../../db/schema.ts";
 import type { Finding, PriorFinding } from "../types.ts";
 
 export interface FindingRow {
@@ -158,18 +158,6 @@ export async function fetchPriorFindings(db: Db, repo: string, prId: string, exc
     patternUuid: row.patternUuid ?? "",
     commitSha: row.commitSha,
   }));
-}
-
-export async function fetchSuppressedPatternIds(db: Db, repo: string): Promise<Set<string>> {
-  const rows = await db
-    .select({ patternId: repoRules.patternId })
-    .from(repoRules)
-    .where(and(eq(repoRules.repo, repo), eq(repoRules.status, "active"), eq(repoRules.ruleType, "ignore")));
-  const ids = new Set<string>();
-  for (const row of rows) {
-    if (row.patternId) ids.add(row.patternId);
-  }
-  return ids;
 }
 
 export async function updateReviewStatus(db: Db, reviewId: string, status: string, error?: string): Promise<void> {

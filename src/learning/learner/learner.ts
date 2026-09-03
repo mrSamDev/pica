@@ -132,8 +132,9 @@ export async function runLearner(db: Db, input: LearnInput, options: LearnerOpti
   }
 
   const payload = { patternKey: pattern[0]?.canonicalMessage ?? "", reason: counts.latestReason };
-  // Canonical hash over the fixed payload keys — deterministic regardless of
-  // key ordering in whatever built the object.
+  // Canonical hash over the fixed payload fields, concatenated in a stable
+  // order so equal payloads always hash identically (snapshot.ts does the
+  // same for its canonical JSON).
   const payloadHash = createHash("sha256")
     .update(`${payload.patternKey}|${payload.reason ?? ""}`)
     .digest("hex");

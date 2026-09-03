@@ -48,3 +48,13 @@ export interface PriorFinding {
   patternUuid: string;
   commitSha: string;
 }
+
+// Deterministic suppression the post-filter enforces. Pattern suppression comes
+// from learned/manual ignore rules on a pattern id (suppress it everywhere);
+// glob suppression comes from manual ignore rules with a path glob and no
+// pattern id (`rule add --ignore "generated/**"`). No rule carries both
+// (the learner never sets glob; manual ignores never set patternId).
+export interface SuppressionRules {
+  patternIds: ReadonlySet<string>;
+  globs: readonly string[];
+}

@@ -48,9 +48,9 @@ function safeEqual(a: string, b: string): boolean {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) {
-    // SAFETY: timingSafeEqual requires equal-length buffers; comparing the
-    // shorter buffer to itself keeps the operation constant-time. The result
-    // is discarded because the lengths already differ.
+    // SAFETY: same constant-time idiom as src/webhooks/signature.ts —
+    // timingSafeEqual throws on unequal lengths, so hash the shorter side
+    // against itself; the result is discarded because the lengths differ.
     const shorter = bufA.length < bufB.length ? bufA : bufB;
     timingSafeEqual(shorter, shorter);
     return false;

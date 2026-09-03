@@ -52,6 +52,7 @@
 - [ ] No `console.log` in `src/`
 - [ ] `pnpm lint` (oxlint + anti-slop) green — anti-slop rules pass with no violations
 - [ ] `pnpm fmt` (oxfmt, printWidth 300) green
+- [ ] Comment hygiene — src comments explain _why_, never restate code; no decorative/duplicated comments (gate: phase-6 TDD list item 7).
 
 ## Tooling setup
 

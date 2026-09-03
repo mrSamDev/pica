@@ -12,7 +12,13 @@ services:
       REDIS_URL: redis://redis:6379
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET}
       LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY}
-      PLATFORM_TOKEN: ${PLATFORM_TOKEN:?set PLATFORM_TOKEN}
+      # Auth: either PLATFORM_TOKEN (PAT) or all three GitHub App vars below.
+      # Optional-interpolated; config validation at boot guards that exactly one
+      # complete auth path is configured.
+      PLATFORM_TOKEN: ${PLATFORM_TOKEN:-}
+      GITHUB_APP_ID: ${GITHUB_APP_ID:-}
+      GITHUB_APP_PRIVATE_KEY: ${GITHUB_APP_PRIVATE_KEY:-}
+      GITHUB_INSTALLATION_ID: ${GITHUB_INSTALLATION_ID:-}
       PLATFORM: ${PLATFORM:-github}
       LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-chat-v3}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:?set DASHBOARD_USERNAME}

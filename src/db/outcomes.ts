@@ -17,7 +17,8 @@ export async function ensureOutcome(db: Db, findingId: string, status: OutcomeSt
 
 export async function getOutcome(db: Db, findingId: string): Promise<OutcomeStatus | null> {
   const rows = await db.select({ status: findingOutcomes.status }).from(findingOutcomes).where(eq(findingOutcomes.findingId, findingId)).limit(1);
-  // SAFETY: status column is text; the state machine owns the valid values.
+  // SAFETY: status is the OutcomeStatus text the feedback state machine wrote;
+  // casting is safe because every write funnels through it.
   return (rows[0]?.status as OutcomeStatus | null) ?? null;
 }
 

@@ -31,8 +31,11 @@ export interface ReviewResult {
   posted: number;
 }
 
-function dropStatus(reason: "suppressed" | "duplicate" | "repeat-human" | "cross-commit"): string {
-  return reason === "suppressed" ? "suppressed" : "duplicate";
+function dropStatus(reason: "suppressed" | "suppressed-glob" | "duplicate" | "repeat-human" | "cross-commit"): string {
+  // Both suppression kinds are persisted under one "suppressed" status, so the
+  // dashboard/metrics count them identically; only the probe path needs to tell
+  // them apart (and it looks at DropReason, not this status).
+  return reason === "suppressed" || reason === "suppressed-glob" ? "suppressed" : "duplicate";
 }
 
 export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promise<ReviewResult> {
@@ -89,7 +92,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
   const filtered = applyPostFilter({
     prId: request.prId,
     findings: allFindings,
-    suppressedPatternIds: learningContext.suppressedPatternIds,
+    suppression: learningContext.suppression,
     protectedCategories: new Set(deps.config.LEARNER_PROTECTED_CATEGORIES),
     existingComments,
     priorFindings,

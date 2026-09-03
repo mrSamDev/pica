@@ -60,6 +60,54 @@ describe("config", () => {
     expect(() => loadConfig({ ...validEnv(), REPO_CONFIG: '{"owner/repo":{"mode":"bogus"}}' })).toThrow();
   });
 
+  it("accepts GitHub App credentials instead of a PAT", () => {
+    const cfg = loadConfig({
+      ...validEnv(),
+      PLATFORM_TOKEN: undefined,
+      GITHUB_APP_ID: "123456",
+      GITHUB_APP_PRIVATE_KEY: "-----BEGIN RSA PRIVATE KEY-----\nsecret\n-----END RSA PRIVATE KEY-----",
+      GITHUB_INSTALLATION_ID: "789",
+    });
+    expect(cfg.GITHUB_APP_ID).toBe("123456");
+  });
+
+  it("rejects config with neither a PAT nor complete GitHub App credentials", () => {
+    expect(() => loadConfig({ ...validEnv(), PLATFORM_TOKEN: undefined })).toThrow(/PLATFORM_TOKEN/);
+    expect(() => loadConfig({ ...validEnv(), PLATFORM_TOKEN: undefined, GITHUB_APP_ID: "1", GITHUB_APP_PRIVATE_KEY: "pem" })).toThrow(/GITHUB_APP_ID/);
+  });
+
+  it("rejects partial GitHub App credentials", () => {
+    expect(() => loadConfig({ ...validEnv(), PLATFORM_TOKEN: undefined, GITHUB_APP_ID: "1" })).toThrow(/GITHUB_APP_ID/);
+  });
+
+  it("rejects GitHub App credentials when PLATFORM is bitbucket", () => {
+    expect(() =>
+      loadConfig({
+        ...validEnv(),
+        PLATFORM: "bitbucket",
+        GITHUB_APP_ID: "1",
+        GITHUB_APP_PRIVATE_KEY: "pem",
+        GITHUB_INSTALLATION_ID: "2",
+      }),
+    ).toThrow(/GITHUB_APP_ID/);
+  });
+
+  it("treats empty-string auth vars as absent (docker compose passes empties)", () => {
+    // GitHub App path with an empty PLATFORM_TOKEN (compose interpolates absent
+    // vars as "") must boot, not die on min(1) before the superRefine runs.
+    expect(() =>
+      loadConfig({
+        ...validEnv(),
+        PLATFORM_TOKEN: "",
+        GITHUB_APP_ID: "1",
+        GITHUB_APP_PRIVATE_KEY: "pem",
+        GITHUB_INSTALLATION_ID: "2",
+      }),
+    ).not.toThrow();
+    // Empty token and no app creds must still fail loudly, naming the field.
+    expect(() => loadConfig({ ...validEnv(), PLATFORM_TOKEN: "" })).toThrow(/PLATFORM_TOKEN/);
+  });
+
   it("requires dashboard credentials in production", () => {
     expect(() => loadConfig({ ...validEnv(), NODE_ENV: "production" })).toThrow(/DASHBOARD_USERNAME/);
     expect(() => loadConfig({ ...validEnv(), NODE_ENV: "production", DASHBOARD_USERNAME: "admin" })).toThrow(/DASHBOARD_PASSWORD/);

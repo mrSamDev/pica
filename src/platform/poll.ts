@@ -1,5 +1,6 @@
 import { and, eq, gte, lt } from "drizzle-orm";
 import type { Pool, PoolClient } from "pg";
+import type { Logger } from "pino";
 
 import type { Db } from "../db/client.ts";
 import { incrementPollCount } from "../db/outcomes.ts";
@@ -28,6 +29,7 @@ export interface PollDeps {
   db: Db;
   platform: CommentStateFetcher;
   queue: OutcomeQueue;
+  logger?: Logger;
 }
 
 export interface PollableComment {
@@ -69,7 +71,17 @@ async function pollBatch(deps: PollDeps, ageHours: number): Promise<void> {
   const comments = await selectFindingsToPoll(deps.db, cutoffLower, cutoffUpper);
   for (const comment of comments) {
     await incrementPollCount(deps.db, comment.findingId);
-    const state = await deps.platform.getCommentState(comment.repo, comment.prId, comment.commentId);
+    let state: CommentState;
+    try {
+      state = await deps.platform.getCommentState(comment.repo, comment.prId, comment.commentId);
+    } catch (error) {
+      // Transient platform failure (5xx/network) is NOT proof the comment was
+      // deleted — skip it this round and let a later poll window re-check it.
+      // Fabricating `deleted` here would emit a terminal dismissal and poison
+      // the learner's evidence (H1).
+      deps.logger?.warn({ findingId: comment.findingId, err: error }, "skipping comment poll on platform error");
+      continue;
+    }
     const to = classifyCommentState(state, ageHours);
     if (to) {
       await deps.queue.enqueue({ findingId: comment.findingId, repo: comment.repo, to, source: "poller" });
