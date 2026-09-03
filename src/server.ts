@@ -5,6 +5,7 @@ import { buildApp } from "./app.ts";
 import { loadConfig, getLearnerConfig } from "./config.ts";
 import { createDashboardQueries } from "./dashboard/projection.ts";
 import { createDb } from "./db/client.ts";
+import { runMigrations } from "./db/migrations.ts";
 import { runLearner } from "./learning/learner/learner.ts";
 import { createOpenRouterLLM } from "./llm/openrouter.ts";
 import { createLogger } from "./observability/logger.ts";
@@ -117,6 +118,10 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
 }
 
 try {
+  // §12: single-process deploy — apply pending migrations on boot. Drizzle's
+  // journal table makes this a no-op once the schema is current, so `docker
+  // compose up` boots the full stack with no separate migration step.
+  await runMigrations(db);
   await app.listen({ host: config.HOST, port: config.PORT });
 } catch (error) {
   logger.fatal({ err: error }, "failed to start server");

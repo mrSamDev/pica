@@ -29,7 +29,7 @@
 
 ## Definition of done
 
-- [ ] Security audit checklist complete
-- [ ] Load test passes
-- [ ] Docs verified against actual tree
-- [ ] docker-compose boots the full stack
+- [x] Security audit checklist complete — `docs/security-audit.md` (§7 items → file → test)
+- [x] Load test passes — `test/load.test.ts` (burst/DLQ + diff-size cap)
+- [x] Docs verified against actual tree — `test/docs-reality.test.ts` (forward + reverse)
+- [x] docker-compose boots the full stack — verified live (postgres/redis/app healthy, migrations auto-apply on boot)

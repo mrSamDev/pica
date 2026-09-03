@@ -13,7 +13,6 @@ dist/
 test/
 phases/
 plan.md
-drizzle/
 drizzle.config.ts
 oxlint.config.ts
 vitest.config.ts

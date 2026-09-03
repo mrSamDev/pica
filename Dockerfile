@@ -1,4 +1,6 @@
-# App image only. Postgres/Redis are external (separate URLs via env).
+# App image only. Postgres/Redis come from docker-compose (or any external
+# URLs via DATABASE_URL/REDIS_URL env). Migrations are applied at app boot by
+# src/db/migrations.ts, so the drizzle SQL is copied into the image.
 # Node 24 native type stripping — no build step, no ts-node.
 FROM node:24-alpine
 
@@ -12,8 +14,9 @@ WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 
-# App source
+# App source, plus migrations applied at boot.
 COPY src ./src
+COPY drizzle ./drizzle
 
 # Run as non-root
 USER node

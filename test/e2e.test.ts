@@ -4,13 +4,13 @@ import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testconta
 import { RedisContainer, type StartedRedisContainer } from "@testcontainers/redis";
 import { Queue } from "bullmq";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
 import { buildApp } from "../src/app.ts";
 import { loadConfig } from "../src/config.ts";
 import { createDashboardQueries } from "../src/dashboard/projection.ts";
 import type { Db } from "../src/db/client.ts";
+import { runMigrations } from "../src/db/migrations.ts";
 import * as schema from "../src/db/schema.ts";
 import { findings, reviews } from "../src/db/schema.ts";
 import type { LLMClient } from "../src/llm/client.ts";
@@ -106,9 +106,8 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
   beforeAll(async () => {
     pg = await new PostgreSqlContainer("postgres:16-alpine").start();
     pool = new Pool({ connectionString: pg.getConnectionUri() });
-    const raw = drizzle(pool);
-    await migrate(raw, { migrationsFolder: "./drizzle" });
     db = drizzle(pool, { schema });
+    await runMigrations(db);
 
     redisContainer = await new RedisContainer("redis:7-alpine").start();
     redis = createRedisConnection(redisContainer.getConnectionUrl());
