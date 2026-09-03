@@ -12,7 +12,7 @@
 #   REVIEW_THRESHOLD   total changed lines (added+deleted) that counts as medium/large. Default 200.
 #   REVIEW_SKIP        set to 1 to skip the whole gate (e.g. CI, --no-verify already bypasses).
 #   REVIEW_TIMEOUT      seconds to allow the pi review before aborting. Default 900.
-#   REVIEW_MODEL       pi model pattern. Default: glm-5.3:cloud.
+#   REVIEW_MODEL       pi model pattern. Default: deepseek-v4-pro:cloud.
 #   COMMENT_MODEL       pi model pattern for the comment review. Default: deepseek-v4-flash:cloud.
 #   COMMENT_TIMEOUT     seconds to allow the comment review before aborting. Default 90.
 
@@ -60,7 +60,10 @@ run_pi() {
   fi
   set +e
   set +m  # disable job-control notifications (suppresses "Terminated" noise)
-  pi -p --no-session $model_flag \
+  # --no-tools: the diff is passed via @file, so this is a single-shot LLM
+  # review, not agentic tool exploration. Agentic mode made every commit take
+  # ~10min (pi read files / ran commands per review); single-shot is ~30s.
+  pi -p --no-session --no-tools $model_flag \
     --append-system-prompt "$prompt" \
     "@$input" \
     "Review the entire attached git diff. Cover every file and every hunk — do not sample or skip any part. End with the required JSON verdict." > "$out_file" 2>&1 &
@@ -82,7 +85,7 @@ if [[ -n "${REVIEW_MODEL:-}" ]]; then
 elif [[ -n "${REVIEW_DEFAULT_MODEL:-}" ]]; then
   REVIEW_MODEL_FLAG="$REVIEW_DEFAULT_MODEL"
 else
-  REVIEW_MODEL_FLAG="glm-5.3:cloud"
+  REVIEW_MODEL_FLAG="deepseek-v4-pro:cloud"
 fi
 
 echo "review-gate: running pi review..."
