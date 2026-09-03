@@ -7,6 +7,7 @@ export interface DashboardState {
     reviewsCompleted: number;
     reviewsFailed: number;
     queueDepth: number;
+    failedJobs: number;
   };
   reviewBehavior: {
     findingsPerPr: number;
@@ -35,7 +36,7 @@ export function getDashboardHtml(): string {
 }
 
 export async function getDashboardState(queries: DashboardQueries): Promise<DashboardState> {
-  const [system, findings, outcomes, activity, queueDepth] = await Promise.all([queries.countReviewsByStatus(), queries.countFindingsByStatus(), queries.countOutcomesByStatus(), queries.recentActivity(20), queries.queueDepth()]);
+  const [system, findings, outcomes, activity, queueDepth, failedJobs] = await Promise.all([queries.countReviewsByStatus(), queries.countFindingsByStatus(), queries.countOutcomesByStatus(), queries.recentActivity(20), queries.queueDepth(), queries.failedJobs()]);
 
   return {
     system: {
@@ -43,6 +44,7 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
       reviewsCompleted: system.completed,
       reviewsFailed: system.failed,
       queueDepth,
+      failedJobs,
     },
     reviewBehavior: {
       findingsPerPr: findings.posted + findings.suppressed + findings.duplicate,

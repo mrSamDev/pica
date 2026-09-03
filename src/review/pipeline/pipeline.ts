@@ -5,6 +5,7 @@ import type { Db } from "../../db/client.ts";
 import { ensureOutcome } from "../../db/outcomes.ts";
 import { emitEvent } from "../../learning/events.ts";
 import type { LLMClient } from "../../llm/client.ts";
+import type { Metrics } from "../../observability/metrics.ts";
 import type { PlatformClient } from "../../platform/types.ts";
 import { parseReviewOutput } from "../parse/parse.ts";
 import { applyPostFilter } from "../postfilter/postfilter.ts";
@@ -19,6 +20,7 @@ export interface ReviewDeps {
   platform: PlatformClient;
   llm: LLMClient;
   config: Readonly<Config>;
+  metrics: Metrics;
 }
 
 export interface ReviewResult {
@@ -86,6 +88,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
   // count them and the learning loop can see what was suppressed.
   const droppedRows: FindingRow[] = [];
   for (const dropped of filtered.dropped) {
+    deps.metrics.findingsSuppressed.inc();
     droppedRows.push(toFindingRow(dropped.finding, request.reviewId, request.repo, request.prId, request.commitSha, dropStatus(dropped.reason), dropped.finding.patternUuid));
   }
 
@@ -120,6 +123,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
           commentId = comment.id;
         }
         writes.push({ findingId, status: "posted", commentId });
+        deps.metrics.findingsPosted.inc();
         posted++;
       } else {
         writes.push({ findingId, status: "capped" });

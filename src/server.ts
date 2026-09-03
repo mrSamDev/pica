@@ -7,6 +7,7 @@ import { createDashboardQueries } from "./dashboard/projection.ts";
 import { createDb } from "./db/client.ts";
 import { createOpenRouterLLM } from "./llm/openrouter.ts";
 import { createLogger } from "./observability/logger.ts";
+import { createMetrics } from "./observability/metrics.ts";
 import { createBitbucketClient } from "./platform/bitbucket.ts";
 import { createGitHubClient } from "./platform/github.ts";
 import { pollFeedback } from "./platform/poll.ts";
@@ -16,23 +17,34 @@ import { createReviewWorker } from "./queue/worker.ts";
 
 const config = loadConfig(process.env);
 const logger = createLogger(config);
+const metrics = createMetrics();
 const pool = new Pool({ connectionString: config.DATABASE_URL });
 const db = createDb(pool);
 const redis = createRedisConnection(config.REDIS_URL);
-const queue = new Queue("reviews", { connection: redis });
-const outcomeQueue = new Queue("outcomes", { connection: redis });
+// Retained failed jobs are the v1 DLQ (bounded so Redis doesn't grow forever);
+// the dashboard surfaces getFailedCount(). Retries with exponential backoff
+// give transient LLM/platform errors a chance.
+const jobOptions = {
+  attempts: 3,
+  backoff: { type: "exponential" as const, delay: 1000 },
+  removeOnComplete: { count: 500 },
+  removeOnFail: { count: 1000 },
+};
+const queue = new Queue("reviews", { connection: redis, defaultJobOptions: jobOptions });
+const outcomeQueue = new Queue("outcomes", { connection: redis, defaultJobOptions: jobOptions });
 const allowedHosts = new Set(config.ALLOWED_HOSTS);
 const platform = config.PLATFORM === "github" ? createGitHubClient({ token: config.PLATFORM_TOKEN, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES }) : createBitbucketClient({ token: config.PLATFORM_TOKEN, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES });
-const llm = createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL });
-const reviewDeps = { db, platform, llm, config };
+const llm = createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS });
+const reviewDeps = { db, platform, llm, config, metrics };
 const worker = createReviewWorker(redis, reviewDeps, logger);
-const outcomeWorker = createOutcomeWorker(redis, { db }, logger);
+const outcomeWorker = createOutcomeWorker(redis, { db, metrics }, logger);
 const app = buildApp(config, logger, {
   db,
   queue,
   platform,
   llm,
-  dashboardQueries: createDashboardQueries(db, queue),
+  dashboardQueries: createDashboardQueries(db, queue, outcomeQueue),
+  metrics,
 });
 
 // Feedback poller. The advisory lock makes overlapping runs harmless, so a

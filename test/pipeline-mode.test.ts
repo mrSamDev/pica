@@ -13,6 +13,7 @@ import type { LLMClient } from "../src/llm/client.ts";
 import type { PlatformClient } from "../src/platform/types.ts";
 import { runReview } from "../src/review/pipeline/pipeline.ts";
 import type { Finding, ReviewMode, ReviewRequest, Severity } from "../src/review/types.ts";
+import { createFakeMetrics } from "./helpers/fakes.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
 const dockerAvailable = await isDockerAvailable();
@@ -125,7 +126,7 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     const reviewId = "11111111-1111-1111-1111-111111111111";
     await seedReview(reviewId, "observe");
     const { platform, inline, pr } = makePlatform();
-    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(3)), config }, makeRequest(reviewId, "42", "observe"));
+    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(3)), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "42", "observe"));
 
     expect(result.posted).toBe(0);
     expect(inline).toHaveLength(0);
@@ -141,7 +142,7 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     const reviewId = "22222222-2222-2222-2222-222222222222";
     await seedReview(reviewId, "observe");
     const { platform, inline, pr } = makePlatform();
-    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(7)), config }, makeRequest(reviewId, "43", "observe", { summaryComment: true }));
+    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(7)), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "43", "observe", { summaryComment: true }));
 
     expect(result.posted).toBe(0);
     expect(inline).toHaveLength(0);
@@ -158,7 +159,7 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     const reviewId = "33333333-3333-3333-3333-333333333333";
     await seedReview(reviewId, "post");
     const { platform, inline, pr } = makePlatform();
-    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(3)), config }, makeRequest(reviewId, "44", "post"));
+    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(3)), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "44", "post"));
 
     expect(result.posted).toBe(3);
     expect(inline).toHaveLength(3);
@@ -173,7 +174,7 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     const reviewId = "44444444-4444-4444-4444-444444444444";
     await seedReview(reviewId, "dry-run");
     const { platform, inline, pr } = makePlatform();
-    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(3)), config }, makeRequest(reviewId, "45", "dry-run"));
+    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(3)), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "45", "dry-run"));
 
     expect(result.findings).toHaveLength(3);
     expect(result.posted).toBe(0);
@@ -189,7 +190,7 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     const reviewId = "55555555-5555-5555-5555-555555555555";
     await seedReview(reviewId, "post");
     const { platform, inline, pr } = makePlatform();
-    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(5)), config }, makeRequest(reviewId, "46", "post", { postingCap: 2 }));
+    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(5)), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "46", "post", { postingCap: 2 }));
 
     expect(result.posted).toBe(2);
     expect(inline).toHaveLength(2);
@@ -213,7 +214,7 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     // LLM returns a finding whose string patternId resolves to the seeded pattern.
     const finding: Finding = { filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, category: "security", patternId: "security:jwt-expiration", patternUuid: "", severity: "error", message: "JWT expiration isn't validated." };
     const { platform } = makePlatform();
-    await runReview({ db, platform, llm: makeLlm([finding]), config }, makeRequest(reviewId, "47", "post"));
+    await runReview({ db, platform, llm: makeLlm([finding]), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "47", "post"));
 
     const rows = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
     expect(rows).toHaveLength(1);
@@ -234,7 +235,7 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     // Commit B re-flags the same pattern at the same lines -> cross-commit drop.
     const finding: Finding = { filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, category: "security", patternId: "security:complexity", patternUuid: "", severity: "warning", message: "complexity" };
     const { platform } = makePlatform();
-    await runReview({ db, platform, llm: makeLlm([finding]), config }, makeRequest(reviewId, "48", "post", { commitSha: "commitB" }));
+    await runReview({ db, platform, llm: makeLlm([finding]), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "48", "post", { commitSha: "commitB" }));
 
     const rows = await db.select().from(findings).where(eq(findings.reviewId, reviewId));
     // The prior finding (commit A) + the dropped cross-commit finding (commit B).

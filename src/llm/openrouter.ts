@@ -5,6 +5,7 @@ import type { LLMClient } from "./client.ts";
 export interface OpenRouterDeps {
   apiKey: string;
   model: string;
+  timeoutMs: number;
   baseUrl?: string;
   fetchImpl?: typeof fetch;
 }
@@ -31,6 +32,8 @@ export function createOpenRouterLLM(deps: OpenRouterDeps): LLMClient {
           model: deps.model,
           messages: [{ role: "user", content: prompt }],
         }),
+        // A hung provider must not hold a review worker forever.
+        signal: AbortSignal.timeout(deps.timeoutMs),
       });
 
       if (!response.ok) {

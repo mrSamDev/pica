@@ -3,7 +3,20 @@ import type { Queue } from "bullmq";
 import type { DashboardQueries } from "../../src/dashboard/projection.ts";
 import type { Db } from "../../src/db/client.ts";
 import type { LLMClient } from "../../src/llm/client.ts";
+import type { Metrics } from "../../src/observability/metrics.ts";
 import type { PlatformClient } from "../../src/platform/types.ts";
+
+export function createFakeMetrics(): Metrics {
+  // SAFETY: tests never read metric values; a no-op counter satisfies the type.
+  const noop = { inc: () => {} } as Metrics["findingsPosted"];
+  return {
+    findingsPosted: noop,
+    findingsSuppressed: noop,
+    outcome: noop,
+    // SAFETY: tests never scrape the registry.
+    registry: {} as Metrics["registry"],
+  };
+}
 
 export function createFakeDashboardQueries(overrides?: Partial<DashboardQueries>): DashboardQueries {
   return {
@@ -12,6 +25,7 @@ export function createFakeDashboardQueries(overrides?: Partial<DashboardQueries>
     countOutcomesByStatus: async () => ({ posted: 0, replied: 0, resolved: 0, dismissed: 0 }),
     recentActivity: async () => [],
     queueDepth: async () => 0,
+    failedJobs: async () => 0,
     ...overrides,
   };
 }

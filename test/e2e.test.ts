@@ -18,6 +18,7 @@ import { createLogger } from "../src/observability/logger.ts";
 import type { PlatformClient } from "../src/platform/types.ts";
 import { createRedisConnection } from "../src/queue/connection.ts";
 import { createReviewWorker } from "../src/queue/worker.ts";
+import { createFakeMetrics } from "./helpers/fakes.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
 const dockerAvailable = await isDockerAvailable();
@@ -115,7 +116,7 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
 
     platform = makeFakePlatform();
     const llm = makeFakeLlm();
-    const deps = { db, platform, llm, config };
+    const deps = { db, platform, llm, config, metrics: createFakeMetrics() };
     worker = createReviewWorker(redis, deps, logger);
 
     app = buildApp(config, logger, {
@@ -123,7 +124,8 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
       queue,
       platform,
       llm,
-      dashboardQueries: createDashboardQueries(db, queue),
+      dashboardQueries: createDashboardQueries(db, queue, queue),
+      metrics: createFakeMetrics(),
     });
   }, 180_000);
 

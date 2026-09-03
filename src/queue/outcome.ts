@@ -6,6 +6,7 @@ import type { Db } from "../db/client.ts";
 import { ensureOutcome, getOutcome, updateOutcome } from "../db/outcomes.ts";
 import { emitEvent } from "../learning/events.ts";
 import { canTransition, isTerminal, type OutcomeStatus } from "../learning/feedback/state.ts";
+import type { Metrics } from "../observability/metrics.ts";
 
 export interface OutcomeJob {
   findingId: string;
@@ -30,6 +31,7 @@ export function createOutcomeQueue(queue: Queue): OutcomeQueue {
 
 export interface OutcomeDeps {
   db: Db;
+  metrics: Metrics;
 }
 
 // Apply one outcome mutation. The state machine rejects invalid transitions and
@@ -40,6 +42,7 @@ export async function applyOutcome(deps: OutcomeDeps, job: OutcomeJob): Promise<
   if (current === null) {
     // No outcome row yet (e.g. a webhook fired before the finding was posted).
     await ensureOutcome(deps.db, job.findingId, job.to);
+    deps.metrics.outcome.inc({ outcome: job.to });
     await emitOutcomeEvent(deps.db, job);
     return;
   }
@@ -55,6 +58,7 @@ export async function applyOutcome(deps: OutcomeDeps, job: OutcomeJob): Promise<
     resolverUser: job.resolverUser,
     resolvedAt: job.to === "resolved" ? new Date() : undefined,
   });
+  deps.metrics.outcome.inc({ outcome: job.to });
   await emitOutcomeEvent(deps.db, job);
 }
 

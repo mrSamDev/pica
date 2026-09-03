@@ -32,6 +32,9 @@ const configSchema = z.object({
   PLATFORM_TOKEN: z.string().min(1),
   PLATFORM: z.enum(["github", "bitbucket"]).default("github"),
   LLM_MODEL: z.string().default("deepseek/deepseek-chat-v3"),
+  // Abort an LLM call that exceeds this budget; a hung provider must not hold
+  // a review worker forever.
+  LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
   // Comma-separated host allowlist for outbound fetches (SSRF guard).
   ALLOWED_HOSTS: z
     .string()

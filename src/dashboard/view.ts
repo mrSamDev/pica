@@ -36,7 +36,9 @@ export const dashboardHtml = `<!doctype html>
           row('Running', state.system.reviewsRunning) +
           row('Completed', state.system.reviewsCompleted) +
           row('Failed', state.system.reviewsFailed) +
-          row('Queue depth', state.system.queueDepth);
+          row('Queue depth', state.system.queueDepth) +
+          row('Failed jobs (DLQ)', state.system.failedJobs) +
+          '<p class="empty">Failed jobs are retained as the DLQ; re-drive via redis-cli.</p>';
         document.getElementById('behavior').innerHTML =
           row('Findings / PR', state.reviewBehavior.findingsPerPr) +
           row('Posted', state.reviewBehavior.posted) +

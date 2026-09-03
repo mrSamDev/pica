@@ -10,6 +10,7 @@ export const dashboardSchema = {
             reviewsCompleted: { type: "integer" },
             reviewsFailed: { type: "integer" },
             queueDepth: { type: "integer" },
+            failedJobs: { type: "integer" },
           },
         },
         reviewBehavior: {

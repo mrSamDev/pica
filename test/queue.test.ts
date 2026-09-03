@@ -35,4 +35,35 @@ describe.skipIf(!dockerAvailable)("queue", () => {
     await queueEvents.close();
     await queue.close();
   });
+
+  it("retained failed jobs act as the v1 DLQ", async () => {
+    if (connection === undefined) throw new Error("connection not initialized");
+
+    const queue = new Queue("dlq-test", {
+      connection,
+      defaultJobOptions: { attempts: 2, backoff: { type: "exponential", delay: 100 }, removeOnComplete: { count: 10 }, removeOnFail: false },
+    });
+    const worker = new Worker(
+      "dlq-test",
+      async () => {
+        throw new Error("always fails");
+      },
+      { connection },
+    );
+    await worker.waitUntilReady();
+
+    await queue.add("fail-job", {});
+    // Wait for the job to exhaust its attempts and land in the failed set.
+    const deadline = Date.now() + 10_000;
+    let failed = 0;
+    while (Date.now() < deadline) {
+      failed = await queue.getFailedCount();
+      if (failed >= 1) break;
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(failed).toBeGreaterThanOrEqual(1);
+
+    await worker.close();
+    await queue.close();
+  });
 });

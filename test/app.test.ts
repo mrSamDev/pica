@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { buildApp } from "../src/app.ts";
 import { loadConfig } from "../src/config.ts";
 import { createLogger } from "../src/observability/logger.ts";
-import { createFakeDashboardQueries, createFakeLlm, createFakePlatform, createUnusedDb, createUnusedQueue } from "./helpers/fakes.ts";
+import { createFakeDashboardQueries, createFakeLlm, createFakeMetrics, createFakePlatform, createUnusedDb, createUnusedQueue } from "./helpers/fakes.ts";
 
 const config = loadConfig({
   DATABASE_URL: "postgres://localhost:5432/pica",
@@ -22,6 +22,7 @@ function makeApp() {
     platform: createFakePlatform(),
     llm: createFakeLlm(),
     dashboardQueries: createFakeDashboardQueries(),
+    metrics: createFakeMetrics(),
   });
 }
 

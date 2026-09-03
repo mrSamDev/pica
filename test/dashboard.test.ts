@@ -4,7 +4,7 @@ import { buildApp } from "../src/app.ts";
 import { loadConfig } from "../src/config.ts";
 import type { DashboardQueries } from "../src/dashboard/projection.ts";
 import { createLogger } from "../src/observability/logger.ts";
-import { createFakeDashboardQueries, createFakeLlm, createFakePlatform, createUnusedDb, createUnusedQueue } from "./helpers/fakes.ts";
+import { createFakeDashboardQueries, createFakeLlm, createFakeMetrics, createFakePlatform, createUnusedDb, createUnusedQueue } from "./helpers/fakes.ts";
 
 const config = loadConfig({
   DATABASE_URL: "postgres://localhost:5432/pica",
@@ -23,6 +23,7 @@ function makeApp(queries: DashboardQueries) {
     platform: createFakePlatform(),
     llm: createFakeLlm(),
     dashboardQueries: queries,
+    metrics: createFakeMetrics(),
   });
 }
 

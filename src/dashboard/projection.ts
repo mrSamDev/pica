@@ -24,9 +24,10 @@ export interface DashboardQueries {
   countOutcomesByStatus(): Promise<OutcomeCounts>;
   recentActivity(limit: number): Promise<ActivityItem[]>;
   queueDepth(): Promise<number>;
+  failedJobs(): Promise<number>;
 }
 
-export function createDashboardQueries(db: Db, queue: Queue): DashboardQueries {
+export function createDashboardQueries(db: Db, queue: Queue, outcomeQueue: Queue): DashboardQueries {
   return {
     async countReviewsByStatus() {
       const rows = await db.select({ status: reviews.status }).from(reviews);
@@ -69,8 +70,12 @@ export function createDashboardQueries(db: Db, queue: Queue): DashboardQueries {
       }));
     },
     async queueDepth() {
-      const counts = await queue.getJobCounts("waiting", "active", "delayed");
-      return (counts.waiting ?? 0) + (counts.active ?? 0) + (counts.delayed ?? 0);
+      const [reviews, outcomes] = await Promise.all([queue.getJobCounts("waiting", "active", "delayed"), outcomeQueue.getJobCounts("waiting", "active", "delayed")]);
+      return (reviews.waiting ?? 0) + (reviews.active ?? 0) + (reviews.delayed ?? 0) + (outcomes.waiting ?? 0) + (outcomes.active ?? 0) + (outcomes.delayed ?? 0);
+    },
+    async failedJobs() {
+      const [reviews, outcomes] = await Promise.all([queue.getFailedCount(), outcomeQueue.getFailedCount()]);
+      return reviews + outcomes;
     },
   };
 }

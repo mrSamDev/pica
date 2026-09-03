@@ -17,7 +17,7 @@ import { createLogger } from "../src/observability/logger.ts";
 import { createRedisConnection } from "../src/queue/connection.ts";
 import { createOutcomeQueue, createOutcomeWorker, type OutcomeQueue } from "../src/queue/outcome.ts";
 import { handleOutcomeEvent } from "../src/webhooks/outcome.ts";
-import { createFakeLlm, createFakePlatform } from "./helpers/fakes.ts";
+import { createFakeLlm, createFakeMetrics, createFakePlatform } from "./helpers/fakes.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
 const dockerAvailable = await isDockerAvailable();
@@ -53,7 +53,7 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
     redis = createRedisConnection(redisContainer.getConnectionUrl());
     queue = new Queue("outcomes", { connection: redis });
     outcomeQueue = createOutcomeQueue(queue);
-    worker = createOutcomeWorker(redis, { db }, logger);
+    worker = createOutcomeWorker(redis, { db, metrics: createFakeMetrics() }, logger);
   }, 180_000);
 
   afterAll(async () => {
@@ -142,7 +142,8 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
       queue,
       platform: createFakePlatform(),
       llm: createFakeLlm(),
-      dashboardQueries: createDashboardQueries(db, queue),
+      dashboardQueries: createDashboardQueries(db, queue, queue),
+      metrics: createFakeMetrics(),
     });
 
     const payload = JSON.stringify({
