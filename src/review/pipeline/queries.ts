@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
 import { findings, llmCalls, patterns, postedComments, repoRules, reviews } from "../../db/schema.ts";
@@ -46,8 +46,31 @@ export async function insertFindings(db: Db, rows: FindingRow[]): Promise<void> 
 
 export async function insertFindingsReturning(db: Db, rows: FindingRow[]): Promise<string[]> {
   if (rows.length === 0) return [];
-  const inserted = await db.insert(findings).values(rows).onConflictDoNothing().returning({ id: findings.id });
-  return inserted.map((row) => row.id);
+  const ids: string[] = [];
+  for (const row of rows) {
+    const inserted = await db.insert(findings).values(row).onConflictDoNothing().returning({ id: findings.id });
+    const id = inserted[0]?.id;
+    if (id) {
+      ids.push(id);
+      continue;
+    }
+    // Conflict: a worker retry re-posting the same review has already inserted
+    // this finding (idempotent posting, §4). Resolve the existing row so the
+    // retry attributes status updates + comment links to it instead of posting
+    // to nothing. The unique index is (repo, pr_id, commit_sha, file_path,
+    // line_start, line_end, message).
+    const existing = await db
+      .select({ id: findings.id })
+      .from(findings)
+      .where(and(eq(findings.repo, row.repo), eq(findings.prId, row.prId), eq(findings.commitSha, row.commitSha), eq(findings.filePath, row.filePath), eq(findings.lineStart, row.lineStart), eq(findings.lineEnd, row.lineEnd), eq(findings.message, row.message)))
+      .limit(1);
+    const existingId = existing[0]?.id;
+    // SAFETY: the finding was just (re)inserted with onConflictDoNothing, so a
+    // pre-existing row for these exact unique-index columns is guaranteed.
+    if (!existingId) throw new Error("failed to resolve finding id after upsert");
+    ids.push(existingId);
+  }
+  return ids;
 }
 
 export async function updateFindingStatus(db: Db, id: string, status: string): Promise<void> {
@@ -112,7 +135,12 @@ export async function ensurePattern(db: Db, repo: string, category: string, patt
   return id;
 }
 
-export async function fetchPriorFindings(db: Db, repo: string, prId: string): Promise<PriorFinding[]> {
+// Prior findings drive cross-commit dedup: don't re-flag on a new commit a
+// pattern already flagged at the same lines on an earlier commit. The current
+// commit must be excluded — a worker retry re-runs the same review, so the
+// prior rows include its OWN pending findings; matching them would drop every
+// finding and report posted: 0.
+export async function fetchPriorFindings(db: Db, repo: string, prId: string, excludeCommitSha: string): Promise<PriorFinding[]> {
   const rows = await db
     .select({
       filePath: findings.filePath,
@@ -122,7 +150,7 @@ export async function fetchPriorFindings(db: Db, repo: string, prId: string): Pr
       commitSha: findings.commitSha,
     })
     .from(findings)
-    .where(and(eq(findings.repo, repo), eq(findings.prId, prId)));
+    .where(and(eq(findings.repo, repo), eq(findings.prId, prId), ne(findings.commitSha, excludeCommitSha)));
   return rows.map((row) => ({
     filePath: row.filePath,
     lineStart: row.lineStart ?? 0,

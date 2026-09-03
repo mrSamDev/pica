@@ -53,6 +53,14 @@ export async function safeFetch(url: string, options: SafeFetchOptions): Promise
       continue;
     }
 
+    // 4xx/5xx statuses are errors, not bodies: an error JSON payload must never
+    // be parsed as a successful response (a 404 diff read as "no diff", or a
+    // 404 comment state read as "not deleted" so the dismissal path never
+    // fires).
+    if (response.status >= 400) {
+      throw new Error(`Request failed with status ${response.status}`);
+    }
+
     const contentLength = Number(response.headers.get("content-length") ?? "0");
     if (contentLength > options.maxBytes) {
       throw new Error("Response too large");

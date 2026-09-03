@@ -67,7 +67,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
     return { findings: allFindings, posted: 0 };
   }
 
-  const [priorFindings, existingComments] = await Promise.all([fetchPriorFindings(deps.db, request.repo, request.prId), deps.platform.listComments(request.repo, request.prId)]);
+  const [priorFindings, existingComments] = await Promise.all([fetchPriorFindings(deps.db, request.repo, request.prId, request.commitSha), deps.platform.listComments(request.repo, request.prId)]);
 
   // Resolve the LLM pattern string to a stable patterns row uuid before the
   // postfilter, so suppression and cross-commit dedup compare uuids, not the

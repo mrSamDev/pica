@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { eq } from "drizzle-orm";
@@ -8,7 +8,7 @@ import { Pool } from "pg";
 
 import { loadConfig } from "../src/config.ts";
 import * as schema from "../src/db/schema.ts";
-import { findings, patterns, repoRules, reviews } from "../src/db/schema.ts";
+import { findings, patterns, postedComments, repoRules, reviews } from "../src/db/schema.ts";
 import type { LLMClient } from "../src/llm/client.ts";
 import type { PlatformClient } from "../src/platform/types.ts";
 import { runReview } from "../src/review/pipeline/pipeline.ts";
@@ -247,5 +247,48 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     expect(rows).toHaveLength(2);
     const dropped = rows.find((row) => row.message === "complexity");
     expect(dropped?.status).toBe("duplicate");
+  });
+
+  it("§4: same-commit retry re-posts instead of dropping everything (crash between insert and post)", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const reviewId = randomUUID();
+    const prId = "49";
+    await seedReview(reviewId, "post");
+
+    // Simulate attempt 1 crashing after the finding-insert transaction but
+    // before any comment posted: rows exist (status pending, no posted_comments).
+    const seeded = makeFindings(3);
+    for (const f of seeded) {
+      await db.insert(findings).values({
+        id: randomUUID(),
+        reviewId,
+        repo: "owner/repo",
+        prId,
+        commitSha: "abc123",
+        filePath: f.filePath,
+        lineStart: f.lineStart,
+        lineEnd: f.lineEnd,
+        category: f.category,
+        patternId: null,
+        severity: f.severity,
+        message: f.message,
+        messageHash: createHash("sha256").update(f.message).digest("hex"),
+        status: "pending",
+      });
+    }
+
+    // The retry re-runs the same review on the same commit: the own rows from
+    // attempt 1 must not be treated as cross-commit priors, and the retry must
+    // post to the existing finding rows rather than report posted: 0.
+    const { platform } = makePlatform();
+    const result = await runReview({ db, platform, llm: makeLlm(makeFindings(3)), config, metrics: createFakeMetrics() }, makeRequest(reviewId, prId, "post"));
+    expect(result.posted).toBe(3);
+
+    const rows = await db.select().from(findings).where(eq(findings.prId, prId));
+    expect(rows).toHaveLength(3);
+    expect(rows.every((r) => r.status === "posted")).toBe(true);
+    const commentIds = (await db.select().from(postedComments)).filter((c) => rows.some((r) => r.id === c.findingId));
+    expect(commentIds).toHaveLength(3);
+    expect(commentIds.every((c) => c.commentId !== "")).toBe(true);
   });
 });

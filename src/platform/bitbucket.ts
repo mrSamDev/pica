@@ -29,6 +29,18 @@ const commentStateSchema = z.object({
   replies: z.array(z.unknown()).optional(),
 });
 
+// A comment POST that returns an unparseable body means the comment may have
+// been created with a real server id we can no longer see. Store "" and it is
+// unattributable forever (and collides on the unique platform+comment_id
+// index), so fail loudly and let BullMQ retry.
+function parseCreatedComment(body: string): string {
+  const parsed = commentIdSchema.safeParse(JSON.parse(body));
+  if (!parsed.success) {
+    throw new Error("comment POST returned an unparseable response");
+  }
+  return String(parsed.data.id);
+}
+
 export function createBitbucketClient(deps: BitbucketDeps): PlatformClient {
   return {
     async fetchDiff(diffHref) {
@@ -63,8 +75,7 @@ export function createBitbucketClient(deps: BitbucketDeps): PlatformClient {
         method: "POST",
         body: JSON.stringify({ content: { raw: content }, inline: { path: target.path, to: target.line } }),
       });
-      const parsed = commentIdSchema.safeParse(JSON.parse(body));
-      return { id: parsed.success ? String(parsed.data.id) : "" };
+      return { id: parseCreatedComment(body) };
     },
     async createPrComment(repo, prId, content) {
       const url = `${API_BASE}/repositories/${repo}/pullrequests/${prId}/comments`;
@@ -76,8 +87,7 @@ export function createBitbucketClient(deps: BitbucketDeps): PlatformClient {
         method: "POST",
         body: JSON.stringify({ content: { raw: content } }),
       });
-      const parsed = commentIdSchema.safeParse(JSON.parse(body));
-      return { id: parsed.success ? String(parsed.data.id) : "" };
+      return { id: parseCreatedComment(body) };
     },
     async getCommentState(repo, prId, commentId) {
       const url = `${API_BASE}/repositories/${repo}/pullrequests/${prId}/comments/${commentId}`;

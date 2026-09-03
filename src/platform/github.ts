@@ -26,6 +26,18 @@ const commentIdSchema = z.object({ id: z.union([z.string(), z.number()]) });
 // in_reply_to marks a reply. Best-effort for the poller.
 const commentStateSchema = z.object({ in_reply_to: z.number().nullable().optional() });
 
+// A comment POST that returns an unparseable/bad-status body means the comment
+// may have been created with a real server id we can no longer see. Store ""
+// and the comment becomes unattributable forever (and "" collides on the
+// unique platform+comment_id index), so fail loudly and let BullMQ retry.
+function parseCreatedComment(body: string): string {
+  const parsed = commentIdSchema.safeParse(JSON.parse(body));
+  if (!parsed.success) {
+    throw new Error("comment POST returned an unparseable response");
+  }
+  return String(parsed.data.id);
+}
+
 export function createGitHubClient(deps: GitHubDeps): PlatformClient {
   return {
     async fetchDiff(diffHref) {
@@ -60,8 +72,7 @@ export function createGitHubClient(deps: GitHubDeps): PlatformClient {
         method: "POST",
         body: JSON.stringify({ body: content, commit_id: target.commitSha, path: target.path, line: target.line }),
       });
-      const parsed = commentIdSchema.safeParse(JSON.parse(body));
-      return { id: parsed.success ? String(parsed.data.id) : "" };
+      return { id: parseCreatedComment(body) };
     },
     async createPrComment(repo, prId, content) {
       // PR comments are issue comments on GitHub.
@@ -74,8 +85,7 @@ export function createGitHubClient(deps: GitHubDeps): PlatformClient {
         method: "POST",
         body: JSON.stringify({ body: content }),
       });
-      const parsed = commentIdSchema.safeParse(JSON.parse(body));
-      return { id: parsed.success ? String(parsed.data.id) : "" };
+      return { id: parseCreatedComment(body) };
     },
     async getCommentState(repo, prId, commentId) {
       const url = `${API_BASE}/repos/${repo}/pulls/${prId}/comments/${commentId}`;

@@ -65,4 +65,13 @@ describe("ssrf", () => {
     const fetchImpl = async () => jsonResponse("x".repeat(5000));
     await expect(safeFetch("https://api.github.com/repos/x", { allowedHosts: allowed, maxBytes: 100, fetchImpl })).rejects.toThrow(/Response too large/);
   });
+
+  it("throws on a non-2xx status instead of treating error JSON as a body", async () => {
+    // A 404 returns an error JSON body; without the status check safeFetch would
+    // hand that JSON back as the successful response (a dead diff/comment path).
+    const fetchImpl = async () => jsonResponse('{"message":"Not Found"}', { status: 404 });
+    await expect(safeFetch("https://api.github.com/repos/x", { allowedHosts: allowed, maxBytes: 1000, fetchImpl })).rejects.toThrow(/status 404/);
+    const five = async () => jsonResponse('{"error":"upstream"}', { status: 502 });
+    await expect(safeFetch("https://api.github.com/repos/x", { allowedHosts: allowed, maxBytes: 1000, fetchImpl: five })).rejects.toThrow(/status 502/);
+  });
 });
