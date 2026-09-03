@@ -1,0 +1,1 @@
+ALTER TABLE "repo_rules" ADD COLUMN "last_probed_at" timestamp with time zone;

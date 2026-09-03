@@ -28,12 +28,15 @@ export const dashboardHtml = `<!doctype html>
       <div class="panel"><h2>System health</h2><div id="system"><p class="empty">Loading…</p></div></div>
       <div class="panel"><h2>Review behavior</h2><div id="behavior"><p class="empty">Loading…</p></div></div>
       <div class="panel"><h2>Outcomes</h2><div id="outcomes"><p class="empty">Loading…</p></div></div>
-      <div class="panel"><h2>Learning</h2><div id="learning"><p class="empty">Loading…</p></div><div id="rules"><p class="empty">Loading…</p></div></div>
+      <div class="panel"><h2>Learning</h2><div id="learning"><p class="empty">Loading…</p></div><div id="probes"></div><div id="rules"><p class="empty">Loading…</p></div></div>
       <div class="panel"><h2>Recent activity</h2><div id="activity"><p class="empty">Loading…</p></div></div>
     </div>
     <script>
       function row(k, v) { return '<div class="row"><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>'; }
       function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+      // §8 north-star trend as raw percentages, oldest -> newest: a falling
+      // number is readable learning, not a made-up "health" line.
+      function trendRow(rates) { return rates.length === 0 ? '' : row('Dismissal rate / review', rates.map(function (r) { return Math.round(r * 100) + '%'; }).join(' → ')); }
       function render(state) {
         document.getElementById('system').innerHTML =
           row('Running', state.system.reviewsRunning) +
@@ -58,7 +61,17 @@ export const dashboardHtml = `<!doctype html>
           row('Retired rules', state.learning.retiredRules) +
           (state.learning.learningLagMs !== null
             ? row('Learning lag (s)', Math.round(state.learning.learningLagMs))
-            : '<p class="empty">Learning lag: no rule has activated yet.</p>');
+            : '<p class="empty">Learning lag: no rule has activated yet.</p>') +
+          trendRow(state.learning.dismissalRateTrend);
+        var probes = document.getElementById('probes');
+        if (state.learning.probes.length === 0) {
+          probes.innerHTML = '<p class="empty">Probes: none yet — nothing suppressed to re-check.</p>';
+        } else {
+          probes.innerHTML = '<h2>ε-probes (suppressed patterns still generating evidence)</h2><ul class="activity">' +
+            state.learning.probes.map(function (p) {
+              return '<li><code>' + esc(p.filePath) + '</code> <span class="muted">' + esc(new Date(p.at).toISOString().slice(0, 10)) + '</span></li>';
+            }).join('') + '</ul>';
+        }
         var activity = document.getElementById('activity');
         if (state.recentActivity.length === 0) {
           activity.innerHTML = '<p class="empty">No activity yet.</p>';

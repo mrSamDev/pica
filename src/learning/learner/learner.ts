@@ -3,7 +3,8 @@ import { and, eq, sql } from "drizzle-orm";
 
 import type { SeverityWeights } from "../../config.ts";
 import type { Db } from "../../db/client.ts";
-import { findings, findingOutcomes, patterns, repoRules } from "../../db/schema.ts";
+import { findings, findingOutcomes, learningEvents, patterns, repoRules } from "../../db/schema.ts";
+import { fetchConfirmedDismissalIds, isProtectedCategory, requiresHumanConfirmation } from "./guardrails.ts";
 import { persistRule } from "./persist.ts";
 
 // §5.6 Rule learner: candidate -> confidence -> active.
@@ -16,6 +17,7 @@ export interface LearnerOptions {
   minEvidence: number;
   activationThreshold: number;
   severityWeights: SeverityWeights;
+  protectedCategories: ReadonlySet<string>;
 }
 
 export function betaConfidence(negative: number, generated: number): number {
@@ -35,7 +37,7 @@ export function severityWeight(severity: string, weights: SeverityWeights): numb
   }
 }
 
-export type RuleStage = "none" | "candidate" | "active";
+export type RuleStage = "none" | "candidate" | "active" | "retired";
 
 export interface EvidenceCounts {
   generated: number;
@@ -55,6 +57,8 @@ export function decideStage(counts: EvidenceCounts, options: LearnerOptions): Ru
 export interface LearnResult {
   ruleId: string | null;
   stage: RuleStage;
+  // §5.5: true when rule formation was refused for a protected category.
+  protectedBlocked?: boolean;
 }
 
 export interface LearnInput {
@@ -72,15 +76,41 @@ export async function runLearner(db: Db, input: LearnInput, options: LearnerOpti
     return { ruleId: null, stage: "none" };
   }
 
+  const pattern = await db.select({ canonicalMessage: patterns.canonicalMessage, category: patterns.category }).from(patterns).where(eq(patterns.id, patternId)).limit(1);
+
+  // §5.5 protected categories: an auto-ignore rule suppresses a pattern
+  // wholesale — every severity, every file. So one error-severity finding in
+  // a protected category disqualifies the pattern from auto-suppression
+  // entirely, regardless of outcome.
+  if (isProtectedCategory(pattern[0]?.category ?? "", options.protectedCategories)) {
+    const errorFinding = await db
+      .select({ id: findings.id })
+      .from(findings)
+      .where(and(eq(findings.patternId, patternId), eq(findings.severity, "error")))
+      .limit(1);
+    if (errorFinding.length > 0) {
+      return { ruleId: null, stage: "none", protectedBlocked: true };
+    }
+  }
+
   const evidenceRows = await db
     .select({ id: findings.id, severity: findings.severity, status: findingOutcomes.status, dismissalReason: findingOutcomes.dismissalReason, updatedAt: findingOutcomes.updatedAt })
     .from(findings)
     .innerJoin(findingOutcomes, eq(findingOutcomes.findingId, findings.id))
     .where(and(eq(findings.patternId, patternId), sql`${findingOutcomes.status} in ('resolved','dismissed')`));
 
+  // §5.5 human routing: unconfirmed error dismissals are not evidence yet.
+  const confirmedDismissalIds = await fetchConfirmedDismissalIds(
+    db,
+    evidenceRows.filter((row) => row.status === "dismissed" && requiresHumanConfirmation(row.severity)).map((row) => row.id),
+  );
+
   const counts: EvidenceCounts = { generated: 0, negative: 0, positive: 0, confidence: 0 };
   let latestDismissalAt: number | null = null;
   for (const row of evidenceRows) {
+    if (row.status === "dismissed" && requiresHumanConfirmation(row.severity) && !confirmedDismissalIds.has(row.id)) {
+      continue;
+    }
     const weight = severityWeight(row.severity, options.severityWeights);
     counts.generated += weight;
     if (row.status === "dismissed") {
@@ -101,7 +131,6 @@ export async function runLearner(db: Db, input: LearnInput, options: LearnerOpti
     return { ruleId: null, stage };
   }
 
-  const pattern = await db.select({ canonicalMessage: patterns.canonicalMessage }).from(patterns).where(eq(patterns.id, patternId)).limit(1);
   const payload = { patternKey: pattern[0]?.canonicalMessage ?? "", reason: counts.latestReason };
   // Canonical hash over the fixed payload keys — deterministic regardless of
   // key ordering in whatever built the object.
@@ -119,11 +148,20 @@ export async function runLearner(db: Db, input: LearnInput, options: LearnerOpti
   const ruleId = existing[0]?.id ?? null;
   const previousStatus = existing[0]?.status ?? null;
 
-  // Never resurrect a retired rule in this phase; decay/retire arrive in Phase 5.
+  // §5.7 resurrection: a decayed rule (no rule.manual_retired marker) falls
+  // through so the loop can re-learn it; a manual retire stays terminal.
   if (previousStatus === "retired") {
-    await db.update(repoRules).set({ lastObservedAt: now }).where(eq(repoRules.id, existing[0]!.id));
-    // SAFETY: a retired rule keeps its retired status; stage is informational here.
-    return { ruleId, stage: "retired" as RuleStage };
+    const manualRetire = await db
+      .select({ id: learningEvents.id })
+      .from(learningEvents)
+      .where(and(eq(learningEvents.eventType, "rule.manual_retired"), eq(learningEvents.aggregateId, `rule:${existing[0]!.id}`)))
+      .limit(1);
+    if (manualRetire.length > 0) {
+      await db.update(repoRules).set({ lastObservedAt: now }).where(eq(repoRules.id, existing[0]!.id));
+      // SAFETY: a manually retired rule keeps its retired status; stage is
+      // informational here.
+      return { ruleId, stage: "retired" };
+    }
   }
 
   const newStatus = previousStatus === "active" || stage === "active" ? ("active" as const) : ("candidate" as const);

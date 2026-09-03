@@ -31,6 +31,8 @@ describe("metrics", () => {
       dashboardQueries: createFakeDashboardQueries(),
       metrics,
       getLearningLag: async () => null,
+
+      getDismissalRate: async () => null,
       auth: {},
     });
 
@@ -41,6 +43,45 @@ describe("metrics", () => {
     expect(res.body).toContain('outcome_total{outcome="resolved"} 1');
     // No rule activated yet -> learning_lag series is absent (honest empty).
     expect(res.body).not.toContain("learning_lag_seconds");
+    // No decisive outcomes yet -> dismissal rate series is also absent.
+    expect(res.body).not.toContain("pattern_dismissal_rate");
+    await app.close();
+  });
+
+  it("§5.7: probes increment findings_probed_total", async () => {
+    const metrics = createMetrics();
+    metrics.probes.inc();
+    const app = buildApp(config, logger, {
+      db: createUnusedDb(),
+      queue: createUnusedQueue(),
+      platform: createFakePlatform(),
+      llm: createFakeLlm(),
+      dashboardQueries: createFakeDashboardQueries(),
+      metrics,
+      getLearningLag: async () => null,
+      getDismissalRate: async () => null,
+      auth: {},
+    });
+    const res = await app.inject({ method: "GET", url: "/metrics" });
+    expect(res.body).toContain("findings_probed_total 1");
+    await app.close();
+  });
+
+  it("§8: pattern_dismissal_rate appears once decisive evidence exists", async () => {
+    const metrics = createMetrics();
+    const app = buildApp(config, logger, {
+      db: createUnusedDb(),
+      queue: createUnusedQueue(),
+      platform: createFakePlatform(),
+      llm: createFakeLlm(),
+      dashboardQueries: createFakeDashboardQueries(),
+      metrics,
+      getLearningLag: async () => null,
+      getDismissalRate: async () => 0.4,
+      auth: {},
+    });
+    const res = await app.inject({ method: "GET", url: "/metrics" });
+    expect(res.body).toContain("pattern_dismissal_rate 0.4");
     await app.close();
   });
 
@@ -54,6 +95,7 @@ describe("metrics", () => {
       dashboardQueries: createFakeDashboardQueries(),
       metrics,
       getLearningLag: async () => 3600,
+      getDismissalRate: async () => null,
       auth: {},
     });
 

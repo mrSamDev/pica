@@ -14,7 +14,7 @@ import { isDockerAvailable } from "./helpers/docker.ts";
 
 const dockerAvailable = await isDockerAvailable();
 const repo = "owner/explain";
-const opts = { minEvidence: 3, activationThreshold: 0.7, severityWeights: { error: 3, warning: 2, suggestion: 1 } };
+const opts = { minEvidence: 3, activationThreshold: 0.7, severityWeights: { error: 3, warning: 2, suggestion: 1 }, protectedCategories: new Set(["security", "data", "concurrency"]) };
 
 describe.skipIf(!dockerAvailable)("explain-rule (§11: rule -> findings -> outcomes)", () => {
   let container: StartedPostgreSqlContainer | undefined;

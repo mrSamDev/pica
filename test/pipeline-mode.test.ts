@@ -208,11 +208,16 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     await seedReview(reviewId, "post");
 
     // Seed the pattern + an active ignore rule referencing it by uuid.
-    await db.insert(patterns).values({ id: patternUuid, repo: "owner/repo", category: "security", canonicalMessage: "security:jwt-expiration", patternVersion: "v1", status: "active" });
+    await db.insert(patterns).values({ id: patternUuid, repo: "owner/repo", category: "correctness", canonicalMessage: "correctness:jwt-expiration", patternVersion: "v1", status: "active" });
     await db.insert(repoRules).values({ repo: "owner/repo", ruleType: "ignore", patternId: patternUuid, payload: { reason: "test" }, payloadHash: "h", status: "active" });
+    // A prior finding in src/ means the glob context is seen, so §5.7 probing
+    // does not fire here and the finding is suppressed deterministically.
+    await db
+      .insert(findings)
+      .values({ id: randomUUID(), reviewId: null, repo: "owner/repo", prId: "47b", commitSha: "prior", filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, category: "correctness", patternId: patternUuid, severity: "warning", message: "prior", messageHash: "prior-h", status: "posted" });
 
     // LLM returns a finding whose string patternId resolves to the seeded pattern.
-    const finding: Finding = { filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, category: "security", patternId: "security:jwt-expiration", patternUuid: "", severity: "error", message: "JWT expiration isn't validated." };
+    const finding: Finding = { filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, category: "correctness", patternId: "correctness:jwt-expiration", patternUuid: "", severity: "warning", message: "JWT expiration isn't validated." };
     const { platform } = makePlatform();
     await runReview({ db, platform, llm: makeLlm([finding]), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "47", "post"));
 

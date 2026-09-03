@@ -162,6 +162,8 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
       dashboardQueries: createDashboardQueries(db, queue, queue),
       metrics: createFakeMetrics(),
       getLearningLag: async () => null,
+
+      getDismissalRate: async () => null,
       auth: {},
     });
 

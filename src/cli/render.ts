@@ -87,6 +87,12 @@ export function renderWeeklyReport(report: WeeklyReport): string {
   for (const d of report.dismissalsByCategory) {
     lines.push(`  ${d.category}: ${d.count}`);
   }
+  lines.push("", `Dismissed errors needing human confirmation: ${report.needsConfirmation.length}`);
+  for (const p of report.needsConfirmation) {
+    lines.push(`  [NEEDS CONFIRMATION] ${p.repo}#${p.prId} ${p.filePath} — ${p.message}`);
+    if (p.reason) lines.push(`    dismissed: ${p.reason}`);
+    lines.push(`    confirm: confirm-dismissal ${p.repo} --finding ${p.findingId}`);
+  }
   return lines.join("\n");
 }
 

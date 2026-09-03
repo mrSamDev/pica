@@ -52,12 +52,18 @@ interface RetireMarker {
   retiredAt: string;
 }
 
+interface DecayMarker {
+  ruleId: string;
+  decayedAt: string;
+}
+
 const SNAPSHOT_EVENT_TYPES = new Set(["rule.updated", "rule.manual_added"]);
 
 // Payload contracts for the marker events the fold consumes. Parsed at the
 // boundary — the log is external input to a rebuild.
 const mergePayloadSchema = z.object({ mergedInto: z.string() });
 const retireMarkerSchema = z.object({ ruleId: z.string(), retiredBy: z.string().optional(), reason: z.string().nullable().optional(), retiredAt: z.iso.datetime() });
+const decayMarkerSchema = z.object({ ruleId: z.string(), decayedAt: z.iso.datetime(), priorConfidence: z.number().nullable().optional() });
 
 function resolveMerges(mergeEvents: EventInput[]): Map<string, string> {
   const direct = new Map<string, string>();
@@ -99,9 +105,14 @@ function winsSnapshot(current: RuleSnapshot, candidate: RuleSnapshot): boolean {
   return candidate.payloadHash > current.payloadHash;
 }
 
-function toRule(snapshot: RuleSnapshot, mergeMap: Map<string, string>, retire: RetireMarker | undefined): ReplayedRule {
+function toRule(snapshot: RuleSnapshot, mergeMap: Map<string, string>, retire: RetireMarker | undefined, decay: DecayMarker | undefined): ReplayedRule {
   const mappedPatternId = snapshot.patternId === null ? null : (mergeMap.get(snapshot.patternId) ?? snapshot.patternId);
-  const isRetired = retire !== undefined;
+  // A manual retire is always terminal (an operator explicitly decided). A
+  // decayed rule stays retired only while no newer snapshot supersedes it — a
+  // rule that was re-learned carries a newer lastObservedAt than its decay
+  // marker, so it comes back active in the rebuild exactly as it did live.
+  const decayed = decay !== undefined && decay.decayedAt >= snapshot.lastObservedAt;
+  const isRetired = retire !== undefined || decayed;
   return {
     ruleId: snapshot.ruleId,
     repo: snapshot.repo,
@@ -119,7 +130,7 @@ function toRule(snapshot: RuleSnapshot, mergeMap: Map<string, string>, retire: R
     lastObservedAt: new Date(snapshot.lastObservedAt),
     createdAt: new Date(snapshot.createdAt),
     createdBy: snapshot.createdBy,
-    deactivatedAt: isRetired ? new Date(retire!.retiredAt) : null,
+    deactivatedAt: isRetired ? new Date((retire?.retiredAt ?? decay?.decayedAt)!) : null,
   };
 }
 
@@ -155,6 +166,7 @@ export function projectEvents(events: EventInput[]): FoldResult {
 
   const snapshots = new Map<string, RuleSnapshot>();
   const retires = new Map<string, RetireMarker>();
+  const decays = new Map<string, DecayMarker>();
   const nativePatternIds = new Map<string, string>();
 
   for (const event of events) {
@@ -171,10 +183,18 @@ export function projectEvents(events: EventInput[]): FoldResult {
     } else if (event.eventType === "rule.manual_retired") {
       const marker = retireMarkerSchema.parse(event.payload);
       retires.set(marker.ruleId, { ruleId: marker.ruleId, retiredAt: marker.retiredAt });
+    } else if (event.eventType === "rule.decayed") {
+      // A rule can be decayed, re-learned, and decayed again; resolve to the
+      // latest decay deterministically so a shuffled replay converges.
+      const marker = decayMarkerSchema.parse(event.payload);
+      const previous = decays.get(marker.ruleId);
+      if (previous === undefined || marker.decayedAt > previous.decayedAt) {
+        decays.set(marker.ruleId, { ruleId: marker.ruleId, decayedAt: marker.decayedAt });
+      }
     }
   }
 
-  const mapped = [...snapshots.values()].map((s) => toRule(s, mergeMap, retires.get(s.ruleId)));
+  const mapped = [...snapshots.values()].map((s) => toRule(s, mergeMap, retires.get(s.ruleId), decays.get(s.ruleId)));
   const rules = dropMergeCollisions(mapped, nativePatternIds).sort((a, b) => a.ruleId.localeCompare(b.ruleId));
 
   const evidenceByRule = new Map<string, EvidencePair[]>();

@@ -16,9 +16,12 @@ export function createFakeMetrics(): Metrics {
   return {
     findingsPosted: noop,
     findingsSuppressed: noop,
+    probes: noop,
     outcome: noop,
     learningLag: noopGauge,
-    // SAFETY: tests never scrape the registry.
+    dismissalRate: noopGauge,
+    // SAFETY: tests never scrape the registry; an empty object satisfies the
+    // type without ever dereferencing it.
     registry: {} as Metrics["registry"],
   };
 }
@@ -34,6 +37,8 @@ export function createFakeDashboardQueries(overrides?: Partial<DashboardQueries>
     countRulesByStatus: async () => ({ active: 0, candidate: 0, retired: 0 }),
     listRules: async () => [],
     learningLag: async () => null,
+    dismissalRateTrend: async () => [],
+    probes: async () => [],
     whyDisappeared: async () => null,
     ...overrides,
   };

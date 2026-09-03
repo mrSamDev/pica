@@ -39,6 +39,13 @@ export const dashboardSchema = {
             retiredRules: { type: "integer" },
             learningLagMs: { type: ["integer", "null"] },
             dismissalRateTrend: { type: "array", items: { type: "number" } },
+            probes: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: { patternId: { type: "string" }, filePath: { type: "string" }, at: { type: "string" } },
+              },
+            },
           },
         },
         recentActivity: { type: "array" },

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { getRepoConfig, loadConfig } from "../src/config.ts";
+import { getRepoConfig, loadConfig, getLearnerConfig } from "../src/config.ts";
 
 const validEnv = (): NodeJS.ProcessEnv => ({
   DATABASE_URL: "postgres://localhost:5432/pica",
@@ -84,5 +84,12 @@ describe("config", () => {
     expect(other.mode).toBe("post");
     expect(other.postingCap).toBe(10);
     expect(other.summaryComment).toBe(false);
+  });
+
+  it("§5.5/§5.7: phase-5 knobs default to protected categories + 90d decay + 30d probe window", () => {
+    const learner = getLearnerConfig(loadConfig(validEnv()));
+    expect(learner.protectedCategories).toEqual(new Set(["security", "data", "concurrency"]));
+    expect(learner.decayDays).toBe(90);
+    expect(learner.probeIntervalDays).toBe(30);
   });
 });

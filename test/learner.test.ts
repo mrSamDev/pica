@@ -18,6 +18,7 @@ const opts = (minEvidence: number, activationThreshold: number): LearnerOptions 
   minEvidence,
   activationThreshold,
   severityWeights: { error: 3, warning: 2, suggestion: 1 },
+  protectedCategories: new Set(["security", "data", "concurrency"]),
 });
 
 const repo = "owner/repo";
@@ -72,16 +73,16 @@ describe.skipIf(!dockerAvailable)("learner orchestration", () => {
     reason?: string;
   }
 
-  async function seedPattern(specs: FindingSpec[], canonicalMessage: string): Promise<{ patternId: string; findingId: string }> {
+  async function seedPattern(specs: FindingSpec[], canonicalMessage: string, category = "security"): Promise<{ patternId: string; findingId: string }> {
     if (db === undefined) throw new Error("db not initialized");
     const patternId = randomUUID();
     const prId = randomUUID();
-    await db.insert(patterns).values({ id: patternId, repo, category: "security", canonicalMessage, patternVersion: "v1", status: "active" });
+    await db.insert(patterns).values({ id: patternId, repo, category, canonicalMessage, patternVersion: "v1", status: "active" });
     for (let i = 0; i < specs.length; i++) {
       const spec = specs[i];
       if (!spec) continue;
       const fid = randomUUID();
-      await db.insert(findings).values({ id: fid, reviewId: null, repo, prId, commitSha: "abc", filePath: "src/a.ts", lineStart: i, lineEnd: i, category: "security", patternId, severity: spec.severity, message: `m${i}`, messageHash: `h${i}`, status: "posted" });
+      await db.insert(findings).values({ id: fid, reviewId: null, repo, prId, commitSha: "abc", filePath: "src/a.ts", lineStart: i, lineEnd: i, category, patternId, severity: spec.severity, message: `m${i}`, messageHash: `h${i}`, status: "posted" });
       await db.insert(schema.findingOutcomes).values({ findingId: fid, status: spec.outcome, dismissalReason: spec.reason });
     }
     // Re-query the first finding id so the learner input is always valid.
@@ -89,6 +90,12 @@ describe.skipIf(!dockerAvailable)("learner orchestration", () => {
     const findingId = first[0]?.id;
     if (!findingId) throw new Error("seed produced no finding");
     return { patternId, findingId };
+  }
+
+  // §5.5: a dismissed error is evidence only after a human confirms it.
+  async function confirmDismissal(findingId: string): Promise<void> {
+    if (db === undefined) throw new Error("db not initialized");
+    await db.insert(learningEvents).values({ eventKey: `finding:${findingId}:dismissal_confirmed`, repo, eventType: "finding.dismissal_confirmed", aggregateId: `finding:${findingId}`, payload: { findingId, confirmedBy: "test" } });
   }
 
   async function getRule(patternId: string) {
@@ -170,7 +177,10 @@ describe.skipIf(!dockerAvailable)("learner orchestration", () => {
 
   it("severity weighting: one error dismissal reaches the gate that three suggestions also reach", async () => {
     if (db === undefined) throw new Error("db not initialized");
-    const { patternId, findingId } = await seedPattern([{ severity: "error", outcome: "dismissed", reason: "false positive" }], "security:error-pattern");
+    // correctness: non-protected — an error in security would be blocked
+    // outright by the §5.5 guard, not absorbed at all.
+    const { patternId, findingId } = await seedPattern([{ severity: "error", outcome: "dismissed", reason: "false positive" }], "correctness:error-pattern", "correctness");
+    await confirmDismissal(findingId);
     const result = await runLearner(db, { findingId, repo }, opts(3, 0.7));
     expect(result.stage).not.toBe("none");
     const rule = await getRule(patternId);
@@ -184,11 +194,11 @@ describe.skipIf(!dockerAvailable)("learner orchestration", () => {
     const d = db;
     const patternId = randomUUID();
     const prId = randomUUID();
-    await d.insert(patterns).values({ id: patternId, repo, category: "security", canonicalMessage: "security:promote", patternVersion: "v1", status: "active" });
+    await d.insert(patterns).values({ id: patternId, repo, category: "correctness", canonicalMessage: "correctness:promote", patternVersion: "v1", status: "active" });
 
     async function seedFinding(i: number, severity: Severity): Promise<string> {
       const fid = randomUUID();
-      await d.insert(findings).values({ id: fid, reviewId: null, repo, prId, commitSha: "abc", filePath: "src/a.ts", lineStart: i, lineEnd: i, category: "security", patternId, severity, message: `promote-${i}`, messageHash: `p${i}`, status: "posted" });
+      await d.insert(findings).values({ id: fid, reviewId: null, repo, prId, commitSha: "abc", filePath: "src/a.ts", lineStart: i, lineEnd: i, category: "correctness", patternId, severity, message: `promote-${i}`, messageHash: `p${i}`, status: "posted" });
       await d.insert(schema.findingOutcomes).values({ findingId: fid, status: "dismissed" });
       return fid;
     }
@@ -203,6 +213,7 @@ describe.skipIf(!dockerAvailable)("learner orchestration", () => {
 
     // A 4th ERROR dismissal (weight 3) pushes gen/neg to 6 -> confidence 8/10=0.8.
     const fourth = await seedFinding(4, "error");
+    await confirmDismissal(fourth);
     await runLearner(db, { findingId: fourth, repo }, opts(3, 0.8));
 
     const rule = await getRule(patternId);

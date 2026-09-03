@@ -6,7 +6,7 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
 import * as schema from "../src/db/schema.ts";
-import { findings, findingOutcomes, patterns, repoRules, reviews, ruleEvidence } from "../src/db/schema.ts";
+import { findings, findingOutcomes, learningEvents, patterns, repoRules, reviews, ruleEvidence } from "../src/db/schema.ts";
 import { createDashboardQueries } from "../src/dashboard/projection.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
@@ -142,5 +142,55 @@ describe.skipIf(!dockerAvailable)("dashboard projection", () => {
     expect(why?.finding.status).toBe("suppressed");
     expect(why?.rule).toBeNull();
     expect(why?.evidence).toEqual([]);
+  });
+
+  it("§8: dismissal-rate trend is one rate per review over time, oldest first", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const d = db;
+    // Two reviews in an isolated repo: 1 dis/1 res (0.5) then 1 dis (1.0).
+    const spec = [
+      { dismissed: 1, resolved: 1, completedAt: new Date("2026-01-01T00:00:00Z") },
+      { dismissed: 1, resolved: 0, completedAt: new Date("2026-01-02T00:00:00Z") },
+    ];
+    for (const r of spec) {
+      const reviewId = randomUUID();
+      const prId = randomUUID();
+      await d.insert(reviews).values({ id: reviewId, repo: "trend/a", prId, commitSha: "abc", status: "done", mode: "post", completedAt: r.completedAt });
+      for (let i = 0; i < r.dismissed; i++) {
+        const findingId = randomUUID();
+        await d.insert(findings).values({ id: findingId, reviewId, repo: "trend/a", prId, commitSha: "a", filePath: `d${i}.ts`, lineStart: i, lineEnd: i, category: "c", severity: "warning", message: `dis${i}`, messageHash: `h${i}`, status: "posted" });
+        await d.insert(findingOutcomes).values({ findingId, status: "dismissed" });
+      }
+      for (let i = 0; i < r.resolved; i++) {
+        const findingId = randomUUID();
+        await d.insert(findings).values({ id: findingId, reviewId, repo: "trend/a", prId, commitSha: "a", filePath: `r${i}.ts`, lineStart: i, lineEnd: i, category: "c", severity: "suggestion", message: `res${i}`, messageHash: `rh${i}`, status: "posted" });
+        await d.insert(findingOutcomes).values({ findingId, status: "resolved" });
+      }
+    }
+    const trend = await makeQueries(d).dismissalRateTrend();
+    // This file's other tests seed decisive outcomes on null-dated reviews,
+    // so only assert on the deterministic parts of our chronology: 0.5 appears,
+    // and a 1.0 follows it (our second review's rate).
+    expect(trend.includes(0.5)).toBe(true);
+    const idx50 = trend.indexOf(0.5);
+    expect(trend.slice(idx50).includes(1)).toBe(true);
+  });
+
+  it("§5.7: probes() lists recent ε-probe events and lastProbe surfaces on the drill-down", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const patternId = randomUUID();
+    const findingId = randomUUID();
+    const reviewId = randomUUID();
+    const probedAt = new Date("2026-02-03T00:00:00Z");
+    await db.insert(reviews).values({ id: reviewId, repo: "r", prId: "400", commitSha: "abc", status: "done", mode: "post" });
+    await db.insert(patterns).values({ id: patternId, repo: "r", category: "correctness", canonicalMessage: "correctness:probed", patternVersion: "v1", status: "active" });
+    await db.insert(findings).values({ id: findingId, reviewId, repo: "r", prId: "400", commitSha: "a", filePath: "src/lib/db.ts", lineStart: 1, lineEnd: 1, category: "correctness", patternId, severity: "warning", message: "probed", messageHash: "hp", status: "posted" });
+    await db.insert(learningEvents).values({ eventKey: `pattern:${patternId}:probed:${findingId}`, repo: "r", eventType: "pattern.probed", aggregateId: `pattern:${patternId}`, payload: { findingId, filePath: "src/lib/db.ts" }, createdAt: probedAt });
+
+    const probes = await makeQueries(db).probes();
+    expect(probes[0]?.filePath).toBe("src/lib/db.ts");
+    expect(new Date(probes[0]!.at).toISOString()).toBe(probedAt.toISOString());
+    const why = await makeQueries(db).whyDisappeared(findingId);
+    expect(why?.lastProbe).not.toBeNull();
   });
 });

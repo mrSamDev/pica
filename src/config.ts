@@ -83,6 +83,26 @@ const configSchema = z.object({
   // min_evidence / threshold values to exercise the gate progression.
   LEARNER_MIN_EVIDENCE: z.coerce.number().int().positive().default(3),
   LEARNER_ACTIVATION_THRESHOLD: z.coerce.number().min(0).max(1).default(0.7),
+  // §5.5 protected categories: auto-ignore rules never suppress severity=error
+  // findings in these taxonomy categories. secrets/auth/crypto/injection live
+  // under `security`, data loss under `data`, concurrency is its own.
+  LEARNER_PROTECTED_CATEGORIES: z
+    .string()
+    .default("security,data,concurrency")
+    .transform(
+      (value) =>
+        new Set(
+          value
+            .split(",")
+            .map((c) => c.trim().toLowerCase())
+            .filter(Boolean),
+        ),
+    ),
+  // §5.7 falsifiability: decay retires a rule after this many days without
+  // supporting dismissals; ε-probing re-flags a suppressed pattern in a new
+  // glob context at most once per pattern per this window.
+  LEARNER_DECAY_DAYS: z.coerce.number().int().positive().default(90),
+  LEARNER_PROBE_INTERVAL_DAYS: z.coerce.number().int().positive().default(30),
   // Severity weighting (§5.6): a dismissed error counts more than a dismissed
   // suggestion, in both the generated and negative counts.
   LEARNER_SEVERITY_WEIGHTS: z
@@ -105,6 +125,9 @@ export interface LearnerConfig {
   minEvidence: number;
   activationThreshold: number;
   severityWeights: SeverityWeights;
+  protectedCategories: ReadonlySet<string>;
+  decayDays: number;
+  probeIntervalDays: number;
 }
 
 /** Learner knobs from config, shape the learner consumes directly. */
@@ -113,6 +136,9 @@ export function getLearnerConfig(config: Readonly<Config>): LearnerConfig {
     minEvidence: config.LEARNER_MIN_EVIDENCE,
     activationThreshold: config.LEARNER_ACTIVATION_THRESHOLD,
     severityWeights: config.LEARNER_SEVERITY_WEIGHTS,
+    protectedCategories: config.LEARNER_PROTECTED_CATEGORIES,
+    decayDays: config.LEARNER_DECAY_DAYS,
+    probeIntervalDays: config.LEARNER_PROBE_INTERVAL_DAYS,
   };
 }
 

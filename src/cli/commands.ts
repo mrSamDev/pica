@@ -1,11 +1,14 @@
 import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import type { Command } from "./args.ts";
 import { renderDryRun, renderExplanation, renderReplay, renderRuleList, renderWeeklyReport } from "./render.ts";
 import type { Config } from "../config.ts";
 import type { Db } from "../db/client.ts";
+import { findings, findingOutcomes } from "../db/schema.ts";
+import { emitEvent } from "../learning/events/emit.ts";
 import { runReplay, type ReplayCase } from "../eval/replay.ts";
 import { explainRule, listRulesForRepo } from "../learning/explain.ts";
 import { addManualRule, resolveRuleId, retireManualRule } from "../learning/rules/manual.ts";
@@ -40,11 +43,40 @@ export async function runCommand(deps: CliDeps, command: Command): Promise<strin
       return runEval(deps, command);
     case "report":
       return weeklyReport(deps.db, deps.now(), command.repo).then(renderWeeklyReport);
+    case "confirm-dismissal":
+      return confirmDismissal(deps.db, command);
     case "rebuild-read-model": {
       const result = await rebuildReadModel(deps.db);
       return `Rebuilt ${result.rules} rules from ${result.events} events.`;
     }
   }
+}
+
+// §5.5 human routing: the CLI emits a finding.dismissal_confirmed event that
+// lets a dismissed error count as learning evidence. Idempotent — confirming
+// twice writes one event (onConflictDoNothing on a fixed key).
+async function confirmDismissal(db: Db, command: Extract<Command, { name: "confirm-dismissal" }>): Promise<string> {
+  const rows = await db
+    .select({ findingId: findings.id, outcome: findingOutcomes.status, severity: findings.severity })
+    .from(findings)
+    .innerJoin(findingOutcomes, eq(findingOutcomes.findingId, findings.id))
+    .where(and(eq(findings.id, command.findingId), eq(findings.repo, command.repo)))
+    .limit(1);
+  const row = rows[0];
+  if (row === undefined) {
+    throw new Error(`finding ${command.findingId} not found in ${command.repo}`);
+  }
+  if (row.outcome !== "dismissed" || row.severity !== "error") {
+    throw new Error("only a dismissed error finding can be routed for confirmation");
+  }
+  await emitEvent(db, {
+    eventKey: `finding:${command.findingId}:dismissal_confirmed`,
+    repo: command.repo,
+    eventType: "finding.dismissal_confirmed",
+    aggregateId: `finding:${command.findingId}`,
+    payload: { findingId: command.findingId, confirmedBy: command.confirmedBy },
+  });
+  return `Dismissal of ${command.findingId} confirmed by ${command.confirmedBy} — it now counts as learning evidence.`;
 }
 
 async function runDryRunReview(deps: CliDeps, command: Extract<Command, { name: "review" }>): Promise<string> {

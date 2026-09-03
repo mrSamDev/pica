@@ -24,6 +24,8 @@ function makeApp() {
     dashboardQueries: createFakeDashboardQueries(),
     metrics: createFakeMetrics(),
     getLearningLag: async () => null,
+
+    getDismissalRate: async () => null,
     auth: {},
   });
 }

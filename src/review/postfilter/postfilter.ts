@@ -1,4 +1,5 @@
 import type { ExistingComment, Finding, PriorFinding } from "../types.ts";
+import { isProtectedCategory } from "../../learning/learner/guardrails.ts";
 
 export type DropReason = "suppressed" | "duplicate" | "repeat-human" | "cross-commit";
 
@@ -6,6 +7,7 @@ export interface PostFilterInput {
   prId: string;
   findings: Finding[];
   suppressedPatternIds: ReadonlySet<string>;
+  protectedCategories: ReadonlySet<string>;
   existingComments: ExistingComment[];
   priorFindings: PriorFinding[];
 }
@@ -35,6 +37,9 @@ function matchesPriorFinding(finding: Finding, prior: PriorFinding): boolean {
 /**
  * Deterministic post-filter. Order matters: suppression first, then dedup by
  * (pr_id, pattern_id), then no-repeat-human, then cross-commit dedup.
+ * §5.5 defense in depth: severity=error findings in protected categories are
+ * exempt from suppression even if a rule matches — the learner guard is the
+ * primary wall; this one covers rules formed before the guard existed.
  */
 export function applyPostFilter(input: PostFilterInput): PostFilterResult {
   const dropped: DroppedFinding[] = [];
@@ -43,8 +48,11 @@ export function applyPostFilter(input: PostFilterInput): PostFilterResult {
 
   for (const finding of input.findings) {
     if (input.suppressedPatternIds.has(finding.patternUuid)) {
-      dropped.push({ finding, reason: "suppressed" });
-      continue;
+      const exempt = finding.severity === "error" && isProtectedCategory(finding.category, input.protectedCategories);
+      if (!exempt) {
+        dropped.push({ finding, reason: "suppressed" });
+        continue;
+      }
     }
 
     const dedupKey = `${input.prId}:${finding.patternUuid}`;

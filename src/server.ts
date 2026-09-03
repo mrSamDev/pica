@@ -10,6 +10,8 @@ import { createOpenRouterLLM } from "./llm/openrouter.ts";
 import { createLogger } from "./observability/logger.ts";
 import { createMetrics } from "./observability/metrics.ts";
 import { getLearningLagSeconds } from "./learning/lag.ts";
+import { getDismissalRate30d } from "./learning/metrics.ts";
+import { decayStaleRules } from "./learning/learner/decay.ts";
 import { createBitbucketClient } from "./platform/bitbucket.ts";
 import { createGitHubClient } from "./platform/github.ts";
 import { pollFeedback } from "./platform/poll.ts";
@@ -59,8 +61,23 @@ const app = buildApp(config, logger, {
   dashboardQueries: createDashboardQueries(db, queue, outcomeQueue),
   metrics,
   getLearningLag: () => getLearningLagSeconds(db),
+  getDismissalRate: () => getDismissalRate30d(db, new Date()),
   auth: { username: config.DASHBOARD_USERNAME, password: config.DASHBOARD_PASSWORD },
 });
+
+// §5.7 decay sweep. Runs daily like the feedback poller; unref so it never
+// keeps the process alive. A stale rule (no supporting dismissal for
+// LEARNER_DECAY_DAYS) gets retired so the bot re-flags and re-learns instead
+// of silently fossilising.
+const decayTimer = setInterval(
+  () => {
+    decayStaleRules(db, new Date(), { decayDays: learnerConfig.decayDays }).catch((error) => {
+      logger.error({ err: error }, "rule decay sweep failed");
+    });
+  },
+  24 * 60 * 60 * 1000,
+);
+decayTimer.unref();
 
 // Feedback poller. The advisory lock makes overlapping runs harmless, so a
 // plain interval is enough; unref so it never keeps the process alive.
@@ -89,6 +106,7 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   process.on(signal, () => {
     logger.info({ signal }, "shutting down");
     clearInterval(pollTimer);
+    clearInterval(decayTimer);
     Promise.all([app.close(), worker.close(), outcomeWorker.close(), pool.end()])
       .then(() => process.exit(0))
       .catch((error) => {

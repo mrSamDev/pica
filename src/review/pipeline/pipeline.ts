@@ -5,6 +5,7 @@ import type { Db } from "../../db/client.ts";
 import { ensureOutcome } from "../../db/outcomes.ts";
 import { emitEvent } from "../../learning/events/emit.ts";
 import { getReviewLearningContext } from "../../learning/retrieval/retrieval.ts";
+import { selectProbeCandidates } from "../../learning/retrieval/probes.ts";
 import type { LLMClient } from "../../llm/client.ts";
 import type { Metrics } from "../../observability/metrics.ts";
 import type { PlatformClient } from "../../platform/types.ts";
@@ -79,37 +80,51 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
     prId: request.prId,
     findings: allFindings,
     suppressedPatternIds: learningContext.suppressedPatternIds,
+    protectedCategories: new Set(deps.config.LEARNER_PROTECTED_CATEGORIES),
     existingComments,
     priorFindings,
   });
 
-  // Severity-sort so the most important findings are posted first when capped.
-  const kept = [...filtered.findings].sort(severityOrder);
+  // §5.7 ε-probing: a suppressed pattern must keep generating evidence. Promote
+  // qualifying dropped findings back up — at most one per pattern, only in a
+  // new glob context, once per window. Probes bypass the posting cap so a low
+  // cap can't kill the falsification mechanism.
+  const suppressedFindings = filtered.dropped.filter((d) => d.reason === "suppressed").map((d) => d.finding);
+  const probeCandidates = suppressedFindings.length > 0 ? await selectProbeCandidates(deps.db, { probeIntervalDays: deps.config.LEARNER_PROBE_INTERVAL_DAYS }, new Date(), suppressedFindings) : [];
+  const probeSet = new Set(probeCandidates);
+  const probeFindings = probeCandidates.map((finding) => ({ ...finding, isProbe: true as const }));
+  const dropped = filtered.dropped.filter((d) => d.reason !== "suppressed" || !probeSet.has(d.finding));
 
-  const keptRows: FindingRow[] = [];
-  for (const finding of kept) {
-    keptRows.push(toFindingRow(finding, request.reviewId, request.repo, request.prId, request.commitSha, "pending", finding.patternUuid));
-  }
+  // Severity-sort so the most important findings are posted first when capped;
+  // probes are appended after, exempt from the cap.
+  const kept = [...filtered.findings].sort(severityOrder);
+  const postOrder = [...kept, ...probeFindings];
 
   // Persist dropped findings with their terminal status so the dashboard can
   // count them and the learning loop can see what was suppressed.
   const droppedRows: FindingRow[] = [];
-  for (const dropped of filtered.dropped) {
+  for (const droppedFinding of dropped) {
     deps.metrics.findingsSuppressed.inc();
-    droppedRows.push(toFindingRow(dropped.finding, request.reviewId, request.repo, request.prId, request.commitSha, dropStatus(dropped.reason), dropped.finding.patternUuid));
+    droppedRows.push(toFindingRow(droppedFinding.finding, request.reviewId, request.repo, request.prId, request.commitSha, dropStatus(droppedFinding.reason), droppedFinding.finding.patternUuid));
   }
 
   // Insert findings atomically. Platform POSTs happen after, outside the
   // transaction, so a slow comment never holds a DB lock.
   const keptIds = await deps.db.transaction(async (tx) => {
     await insertFindings(tx, droppedRows);
-    return insertFindingsReturning(tx, keptRows);
+    return insertFindingsReturning(
+      tx,
+      postOrder.map((finding) => toFindingRow(finding, request.reviewId, request.repo, request.prId, request.commitSha, "pending", finding.patternUuid)),
+    );
   });
 
   const writes: Array<{ findingId: string; status: string; commentId?: string }> = [];
+  // Probes that were actually posted carry a marker event so the rate limit
+  // and dashboard probe view read the log like everything else.
+  const postedProbes: Array<{ patternId: string; findingId: string; filePath: string; repo: string }> = [];
   let posted = 0;
   if (request.mode === "observe") {
-    for (let i = 0; i < kept.length; i++) {
+    for (let i = 0; i < postOrder.length; i++) {
       const findingId = keptIds[i];
       if (findingId) writes.push({ findingId, status: "observed" });
     }
@@ -117,23 +132,30 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
       await deps.platform.createPrComment(request.repo, request.prId, buildSummary(kept));
     }
   } else {
-    for (let i = 0; i < kept.length; i++) {
-      const finding = kept[i];
+    for (let i = 0; i < postOrder.length; i++) {
+      const finding = postOrder[i];
       const findingId = keptIds[i];
       if (!finding || !findingId) continue;
-      if (i < request.postingCap) {
-        // Idempotent posting: reuse a stored comment_id on worker retry.
-        const existing = await fetchPostedCommentId(deps.db, request.platform, findingId);
-        let commentId = existing;
-        if (!commentId) {
-          const comment = await deps.platform.createInlineComment(request.repo, request.prId, { path: finding.filePath, line: finding.lineStart, commitSha: request.commitSha }, withFeedbackFooter(finding));
-          commentId = comment.id;
-        }
-        writes.push({ findingId, status: "posted", commentId });
-        deps.metrics.findingsPosted.inc();
-        posted++;
-      } else {
+      const isProbe = finding.isProbe === true;
+      // The cap applies to regular findings only; probes bypass it (§5.7).
+      if (!isProbe && posted >= request.postingCap) {
         writes.push({ findingId, status: "capped" });
+        continue;
+      }
+      posted++;
+      // Idempotent posting: reuse a stored comment_id on worker retry.
+      const existing = await fetchPostedCommentId(deps.db, request.platform, findingId);
+      let commentId = existing;
+      if (!commentId) {
+        const comment = await deps.platform.createInlineComment(request.repo, request.prId, { path: finding.filePath, line: finding.lineStart, commitSha: request.commitSha }, withFeedbackFooter(finding));
+        commentId = comment.id;
+      }
+      writes.push({ findingId, status: "posted", commentId });
+      if (isProbe) {
+        deps.metrics.probes.inc();
+        postedProbes.push({ patternId: finding.patternUuid, findingId, filePath: finding.filePath, repo: request.repo });
+      } else {
+        deps.metrics.findingsPosted.inc();
       }
     }
   }
@@ -147,12 +169,23 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
         await ensureOutcome(tx, write.findingId, "posted");
       }
     }
+    // §5.7: record each posted probe as an immutable marker event so the rate
+    // limit and the dashboard's probe view read the log like everything else.
+    for (const probe of postedProbes) {
+      await emitEvent(tx, {
+        eventKey: `pattern:${probe.patternId}:probed:${probe.findingId}`,
+        repo: probe.repo,
+        eventType: "pattern.probed",
+        aggregateId: `pattern:${probe.patternId}`,
+        payload: { findingId: probe.findingId, filePath: probe.filePath },
+      });
+    }
     await emitEvent(tx, {
       eventKey: `review:${request.reviewId}:completed`,
       repo: request.repo,
       eventType: "review.completed",
       aggregateId: `review:${request.reviewId}`,
-      payload: { prId: request.prId, findings: kept.length, posted },
+      payload: { prId: request.prId, findings: kept.length + probeFindings.length, posted },
     });
   });
 

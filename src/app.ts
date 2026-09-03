@@ -28,6 +28,8 @@ export interface AppDeps {
   metrics: Metrics;
   // Computes learning_lag from the event log; null when no rule has activated.
   getLearningLag: () => Promise<number | null>;
+  // Computes the rolling-30d dismissal rate; null before decisive outcomes.
+  getDismissalRate: () => Promise<number | null>;
   // Basic auth for the operational endpoints; empty in dev disables it.
   auth: BasicAuthConfig;
 }
@@ -110,7 +112,7 @@ export function buildApp(config: Readonly<Config>, logger: Logger, deps: AppDeps
   });
 
   app.register(dashboardPlugin, { queries: deps.dashboardQueries, auth: deps.auth });
-  app.register(metricsPlugin, { metrics: deps.metrics, getLearningLag: deps.getLearningLag, auth: deps.auth });
+  app.register(metricsPlugin, { metrics: deps.metrics, getLearningLag: deps.getLearningLag, getDismissalRate: deps.getDismissalRate, auth: deps.auth });
   app.register(webhookPlugin, {
     config,
     store: createWebhookStore(deps.db),

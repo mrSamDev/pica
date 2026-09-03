@@ -31,6 +31,7 @@ function makeRule(ruleType: string, patternId: string | null, payload: RulePaylo
     negativeCount: 5,
     firstObservedAt: new Date(),
     lastObservedAt: new Date(),
+    lastProbedAt: null,
     createdBy: "auto:learning",
     createdAt: new Date(),
     deactivatedAt: null,

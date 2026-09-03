@@ -120,6 +120,9 @@ export const repoRules = pgTable(
     negativeCount: integer("negative_count").default(0),
     firstObservedAt: timestamp("first_observed_at", { withTimezone: true }),
     lastObservedAt: timestamp("last_observed_at", { withTimezone: true }),
+    // §5.7 ε-probing: atomically claimed when a probe is posted, so at most
+    // one probe per pattern per window even under concurrent reviews.
+    lastProbedAt: timestamp("last_probed_at", { withTimezone: true }),
     createdBy: text("created_by"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow(),
     deactivatedAt: timestamp("deactivated_at", { withTimezone: true }),

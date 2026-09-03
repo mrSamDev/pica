@@ -18,7 +18,7 @@ import { isDockerAvailable } from "./helpers/docker.ts";
 
 const dockerAvailable = await isDockerAvailable();
 
-const opts = { minEvidence: 3, activationThreshold: 0.7, severityWeights: { error: 3, warning: 2, suggestion: 1 } };
+const opts = { minEvidence: 3, activationThreshold: 0.7, severityWeights: { error: 3, warning: 2, suggestion: 1 }, protectedCategories: new Set(["security", "data", "concurrency"]) };
 
 interface RuleComparable {
   id: string;

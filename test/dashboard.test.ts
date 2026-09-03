@@ -25,6 +25,8 @@ function makeApp(queries: DashboardQueries) {
     dashboardQueries: queries,
     metrics: createFakeMetrics(),
     getLearningLag: async () => null,
+
+    getDismissalRate: async () => null,
     auth: {},
   });
 }
@@ -84,6 +86,31 @@ describe("dashboard", () => {
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
     expect(res.json().learning).toMatchObject({ activeRules: 2, candidateRules: 1, retiredRules: 0, learningLagMs: 3600 });
+    await app.close();
+  });
+
+  it("§8/§5.7: metrics view shows the dismissal-rate trend and ε-probes", async () => {
+    const queries = createFakeDashboardQueries({
+      dismissalRateTrend: async () => [0.5, 0.42, 0.3],
+      probes: async () => [{ patternId: "p1", filePath: "src/auth/jwt.ts", at: new Date().toISOString() }],
+    });
+    const app = makeApp(queries);
+    const res = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(res.json().learning.dismissalRateTrend).toEqual([0.5, 0.42, 0.3]);
+    expect(res.json().learning.probes).toHaveLength(1);
+    expect(res.json().learning.probes[0]?.filePath).toBe("src/auth/jwt.ts");
+    await app.close();
+  });
+
+  it("dashboard view: raw metrics and probes, no marketing copy (control-room aesthetic)", async () => {
+    const app = makeApp(createFakeDashboardQueries({ dismissalRateTrend: async () => [0.5, 0.42, 0.3], probes: async () => [] }));
+    const res = await app.inject({ method: "GET", url: "/dashboard" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("Learning lag");
+    expect(res.body).toContain("Dismissal rate / review");
+    expect(res.body).toContain("ε-probes");
+    // §8 character: raw numbers/statuses, not SaaS metrics-are-simple copy.
+    expect(res.body).not.toMatch(/health score|intelligence|AI magic/i);
     await app.close();
   });
 
@@ -171,6 +198,7 @@ describe("dashboard auth", () => {
       dashboardQueries: createFakeDashboardQueries(),
       metrics: createFakeMetrics(),
       getLearningLag: async () => null,
+      getDismissalRate: async () => null,
       auth: { username: "admin", password: "secret" },
     });
   }

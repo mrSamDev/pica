@@ -1,6 +1,7 @@
 import type { Queue } from "bullmq";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 
+import { getDismissalRateTrend } from "../learning/metrics.ts";
 import { getLearningLagSeconds } from "../learning/lag.ts";
 import type { Db } from "../db/client.ts";
 import { findings, findingOutcomes, learningEvents, patterns, repoRules, ruleEvidence, reviews } from "../db/schema.ts";
@@ -43,7 +44,13 @@ export interface WhyDisappeared {
   pattern: { canonicalMessage: string; category: string };
   rule: { status: string; confidence: number | null; evidenceCount: number; positiveCount: number; negativeCount: number } | null;
   evidence: Array<{ prId: string; outcome: string }>;
-  lastProbe: null;
+  lastProbe: string | null;
+}
+
+export interface ProbeItem {
+  patternId: string;
+  filePath: string;
+  at: string;
 }
 
 export interface DashboardQueries {
@@ -56,6 +63,10 @@ export interface DashboardQueries {
   countRulesByStatus(): Promise<RuleStatusCounts>;
   listRules(): Promise<RuleSummary[]>;
   learningLag(): Promise<number | null>;
+  // §8 north-star trend: dismissal rate per review over time, oldest first.
+  dismissalRateTrend(): Promise<number[]>;
+  // §5.7: recent ε-probes (evidence kept flowing despite suppression).
+  probes(): Promise<ProbeItem[]>;
   whyDisappeared(findingId: string): Promise<WhyDisappeared | null>;
 }
 
@@ -168,6 +179,19 @@ export function createDashboardQueries(db: Db, queue: Queue, outcomeQueue: Queue
     async learningLag() {
       return getLearningLagSeconds(db);
     },
+    async dismissalRateTrend() {
+      return getDismissalRateTrend(db);
+    },
+    async probes() {
+      const rows = await db.select({ patternId: learningEvents.aggregateId, payload: learningEvents.payload, createdAt: learningEvents.createdAt }).from(learningEvents).where(eq(learningEvents.eventType, "pattern.probed")).orderBy(desc(learningEvents.createdAt)).limit(20);
+      return rows.map((row) => ({
+        patternId: row.patternId.replace(/^pattern:/, ""),
+        // SAFETY: probe events carry payload { findingId, filePath } (pipeline
+        // contract, §5.7); an unknown payload renders as a readable fallback.
+        filePath: String((row.payload as { filePath?: unknown })?.filePath ?? ""),
+        at: (row.createdAt ?? new Date()).toISOString(),
+      }));
+    },
     async whyDisappeared(findingId) {
       const finding = await db.select({ findingId: findings.id, status: findings.status, filePath: findings.filePath, message: findings.message, severity: findings.severity, prId: findings.prId, patternId: findings.patternId }).from(findings).where(eq(findings.id, findingId)).limit(1);
       const row = finding[0];
@@ -182,12 +206,21 @@ export function createDashboardQueries(db: Db, queue: Queue, outcomeQueue: Queue
 
       const evidence = rule[0] ? await db.select({ prId: findings.prId, outcome: ruleEvidence.outcome, findingId: ruleEvidence.findingId }).from(ruleEvidence).innerJoin(findings, eq(findings.id, ruleEvidence.findingId)).where(eq(ruleEvidence.ruleId, rule[0].id)) : [];
 
+      // §5.7: surface the last ε-probe so an operator can see the pattern is
+      // still being checked, not silently fossilised.
+      const probes = await db
+        .select({ createdAt: learningEvents.createdAt })
+        .from(learningEvents)
+        .where(and(eq(learningEvents.eventType, "pattern.probed"), eq(learningEvents.aggregateId, `pattern:${row.patternId}`)))
+        .orderBy(desc(learningEvents.createdAt))
+        .limit(1);
+
       return {
         finding: { status: row.status, filePath: row.filePath, message: row.message, severity: row.severity, prId: row.prId },
         pattern: { canonicalMessage: pattern[0]?.canonicalMessage ?? "", category: pattern[0]?.category ?? "" },
         rule: rule[0] ? { status: rule[0].status, confidence: rule[0].confidence === null ? null : Number(rule[0].confidence), evidenceCount: rule[0].evidenceCount ?? 0, positiveCount: rule[0].positiveCount ?? 0, negativeCount: rule[0].negativeCount ?? 0 } : null,
         evidence: evidence.map((e) => ({ prId: e.prId, outcome: e.outcome })),
-        lastProbe: null,
+        lastProbe: probes[0]?.createdAt ? probes[0].createdAt.toISOString() : null,
       };
     },
   };

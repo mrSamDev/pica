@@ -3,6 +3,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { eq } from "drizzle-orm";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -34,6 +35,7 @@ describe("cli args", () => {
     expect(parseArgs(["rule", "retire", "owner/api", "--rule", "abc", "--by", "sam"])).toEqual({ name: "rule-retire", repo: "owner/api", ruleId: "abc", patternId: undefined, retiredBy: "sam" });
     expect(parseArgs(["eval", "--replay", "cases.json", "--golden", "golden.json"])).toEqual({ name: "eval", casesPath: "cases.json", goldenPath: "golden.json" });
     expect(parseArgs(["report", "--weekly", "--repo", "owner/api"])).toEqual({ name: "report", weekly: true, repo: "owner/api" });
+    expect(parseArgs(["confirm-dismissal", "owner/api", "--finding", "abc", "--by", "sam"])).toEqual({ name: "confirm-dismissal", repo: "owner/api", findingId: "abc", confirmedBy: "sam" });
     expect(parseArgs(["rebuild-read-model"])).toEqual({ name: "rebuild-read-model" });
   });
 
@@ -154,5 +156,31 @@ describe.skipIf(!dockerAvailable)("cli commands", () => {
   it("unknown rule retire fails fast", async () => {
     if (deps === undefined) throw new Error("not initialized");
     await expect(runCommand(deps, parseArgs(["rule", "retire", "owner/missing", "--rule", randomUUID(), "--by", "sam"]))).rejects.toThrow(/not found/);
+  });
+
+  it("§5.5: confirm-dismissal routes a dismissed error to the learner + idempotent event", async () => {
+    if (deps === undefined || db === undefined) throw new Error("not initialized");
+    // A dismissed error finding (non-protected category) awaiting confirmation.
+    const findingId = randomUUID();
+    const patternId = randomUUID();
+    await db.insert(schema.patterns).values({ id: patternId, repo: "owner/confirm", category: "correctness", canonicalMessage: "correctness:confirm", patternVersion: "v1", status: "active" });
+    await db.insert(schema.findings).values({ id: findingId, reviewId: null, repo: "owner/confirm", prId: "1", commitSha: "abc", filePath: "src/a.ts", lineStart: 1, lineEnd: 1, category: "correctness", patternId, severity: "error", message: "race", messageHash: "h", status: "posted" });
+    await db.insert(schema.findingOutcomes).values({ findingId, status: "dismissed", dismissalReason: "fp" });
+
+    const out = await runCommand(deps, parseArgs(["confirm-dismissal", "owner/confirm", "--finding", findingId, "--by", "sam"]));
+    expect(out).toContain("confirmed");
+    const confirmedEvents = await db.select().from(learningEvents).where(eq(learningEvents.eventType, "finding.dismissal_confirmed"));
+    expect(confirmedEvents.length).toBeGreaterThan(0);
+
+    // Idempotent: confirming again writes no second event (fixed event key).
+    await runCommand(deps, parseArgs(["confirm-dismissal", "owner/confirm", "--finding", findingId, "--by", "sam"]));
+    const after = await db.select().from(learningEvents).where(eq(learningEvents.eventType, "finding.dismissal_confirmed"));
+    expect(after).toHaveLength(confirmedEvents.length);
+
+    // Only dismissed errors can be confirmed.
+    const resolvedId = randomUUID();
+    await db.insert(schema.findings).values({ id: resolvedId, reviewId: null, repo: "owner/confirm", prId: "2", commitSha: "b", filePath: "src/b.ts", lineStart: 1, lineEnd: 1, category: "correctness", patternId, severity: "error", message: "done", messageHash: "h2", status: "posted" });
+    await db.insert(schema.findingOutcomes).values({ findingId: resolvedId, status: "resolved" });
+    await expect(runCommand(deps, parseArgs(["confirm-dismissal", "owner/confirm", "--finding", resolvedId]))).rejects.toThrow(/dismissed error/);
   });
 });

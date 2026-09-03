@@ -15,6 +15,9 @@ export interface Finding {
   patternUuid: string;
   severity: Severity;
   message: string;
+  // §5.7: true when this finding is an ε-probe re-flagging a suppressed
+  // pattern in a new context (never set by the LLM).
+  isProbe?: boolean;
 }
 
 export interface ReviewRequest {

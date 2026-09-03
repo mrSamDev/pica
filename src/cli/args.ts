@@ -13,6 +13,7 @@ export type Command =
   | { name: "rule-retire"; repo: string; ruleId?: string; patternId?: string; glob?: string; retiredBy: string }
   | { name: "eval"; casesPath: string; goldenPath: string }
   | { name: "report"; weekly: boolean; repo?: string }
+  | { name: "confirm-dismissal"; repo: string; findingId: string; confirmedBy: string }
   | { name: "rebuild-read-model" };
 
 const USAGE = `usage: review-agent <command> [args]
@@ -23,6 +24,7 @@ const USAGE = `usage: review-agent <command> [args]
   rule retire <repo> (--rule <id> | --pattern <uuid> | --ignore <glob>) [--by <user>]
   eval --replay <cases.json> --golden <golden.json>
   report --weekly [--repo <repo>]
+  confirm-dismissal <repo> --finding <id> [--by <user>]
   rebuild-read-model`;
 
 interface Parsed {
@@ -132,6 +134,12 @@ export function parseArgs(argv: string[]): Command {
         throw new Error(`report currently supports --weekly only\n${USAGE}`);
       }
       return { name: "report", weekly: true, repo: optional(flags, "repo") };
+    case "confirm-dismissal": {
+      const repo = positionals[0];
+      if (!repo) throw new Error(`confirm-dismissal needs a repo\n${USAGE}`);
+      const findingId = required(flags, "finding");
+      return { name: "confirm-dismissal", repo, findingId, confirmedBy: optional(flags, "by") ?? "cli" };
+    }
     case "rebuild-read-model":
       return { name: "rebuild-read-model" };
     case "help":

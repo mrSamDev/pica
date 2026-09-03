@@ -87,4 +87,30 @@ describe.skipIf(!dockerAvailable)("weekly report (§11: learned/retired + dismis
     expect(empty.retiredRules).toEqual([]);
     expect(empty.dismissalsByCategory).toEqual([]);
   });
+
+  it("§5.5: a dismissed error appears flagged for human confirmation until confirmed", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    // Two dismissed error findings in-window: one confirmed, one not.
+    const findingId = randomUUID();
+    const patternId = randomUUID();
+    await db.insert(patterns).values({ id: patternId, repo, category: "correctness", canonicalMessage: `correctness:err:${randomUUID()}`, patternVersion: "v1", status: "active" });
+    await db.insert(findings).values({ id: findingId, reviewId: null, repo, prId: "9", commitSha: "abc", filePath: "src/c.ts", lineStart: 1, lineEnd: 1, category: "correctness", patternId, severity: "error", message: "data race", messageHash: randomUUID(), status: "posted" });
+    await db.insert(findingOutcomes).values({ findingId, status: "dismissed", dismissalReason: "fp", updatedAt: daysAgo(2) });
+
+    const confirmedId = randomUUID();
+    const confirmedPattern = randomUUID();
+    await db.insert(patterns).values({ id: confirmedPattern, repo, category: "correctness", canonicalMessage: `correctness:err-c:${randomUUID()}`, patternVersion: "v1", status: "active" });
+    await db
+      .insert(findings)
+      .values({ id: confirmedId, reviewId: null, repo, prId: "9", commitSha: "abc", filePath: "src/d.ts", lineStart: 1, lineEnd: 1, category: "correctness", patternId: confirmedPattern, severity: "error", message: "confirmed race", messageHash: randomUUID(), status: "posted" });
+    await db.insert(findingOutcomes).values({ findingId: confirmedId, status: "dismissed", updatedAt: daysAgo(1) });
+    await db.insert(learningEvents).values({ eventKey: `finding:${confirmedId}:dismissal_confirmed`, repo, eventType: "finding.dismissal_confirmed", aggregateId: `finding:${confirmedId}`, payload: { findingId: confirmedId, confirmedBy: "sam" }, createdAt: daysAgo(1) });
+
+    const report = await weeklyReport(db, NOW);
+    expect(report.needsConfirmation).toHaveLength(1);
+    const pending = report.needsConfirmation[0]!;
+    expect(pending.findingId).toBe(findingId);
+    expect(pending.severity).toBe("error");
+    expect(pending.message).toBe("data race");
+  });
 });

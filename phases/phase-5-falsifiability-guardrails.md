@@ -41,8 +41,8 @@
 
 ## Definition of done
 
-- [ ] Guardrail test green (protected error never auto-suppressed)
-- [ ] Falsifiability test green (probes keep evidence flowing)
-- [ ] Decay test green
-- [ ] `learning_lag` + trend metrics emitted
-- [ ] Dashboard metrics view tested
+- [x] Guardrail test green (protected error never auto-suppressed)
+- [x] Falsifiability test green (probes keep evidence flowing)
+- [x] Decay test green
+- [x] `learning_lag` + trend metrics emitted
+- [x] Dashboard metrics view tested
