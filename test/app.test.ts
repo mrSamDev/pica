@@ -23,6 +23,8 @@ function makeApp() {
     llm: createFakeLlm(),
     dashboardQueries: createFakeDashboardQueries(),
     metrics: createFakeMetrics(),
+    getLearningLag: async () => null,
+    auth: {},
   });
 }
 

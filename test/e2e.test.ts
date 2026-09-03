@@ -126,6 +126,8 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
       llm,
       dashboardQueries: createDashboardQueries(db, queue, queue),
       metrics: createFakeMetrics(),
+      getLearningLag: async () => null,
+      auth: {},
     });
   }, 180_000);
 

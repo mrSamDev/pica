@@ -30,6 +30,8 @@ describe("metrics", () => {
       llm: createFakeLlm(),
       dashboardQueries: createFakeDashboardQueries(),
       metrics,
+      getLearningLag: async () => null,
+      auth: {},
     });
 
     const res = await app.inject({ method: "GET", url: "/metrics" });
@@ -37,6 +39,27 @@ describe("metrics", () => {
     expect(res.body).toContain("findings_posted_total 1");
     expect(res.body).toContain("findings_suppressed_total 1");
     expect(res.body).toContain('outcome_total{outcome="resolved"} 1');
+    // No rule activated yet -> learning_lag series is absent (honest empty).
+    expect(res.body).not.toContain("learning_lag_seconds");
+    await app.close();
+  });
+
+  it("sets learning_lag_seconds when a rule has activated", async () => {
+    const metrics = createMetrics();
+    const app = buildApp(config, logger, {
+      db: createUnusedDb(),
+      queue: createUnusedQueue(),
+      platform: createFakePlatform(),
+      llm: createFakeLlm(),
+      dashboardQueries: createFakeDashboardQueries(),
+      metrics,
+      getLearningLag: async () => 3600,
+      auth: {},
+    });
+
+    const res = await app.inject({ method: "GET", url: "/metrics" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("learning_lag_seconds 3600");
     await app.close();
   });
 });

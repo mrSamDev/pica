@@ -35,6 +35,10 @@ const configSchema = z.object({
   // Abort an LLM call that exceeds this budget; a hung provider must not hold
   // a review worker forever.
   LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),
+  // HTTP Basic credentials for the dashboard + /metrics endpoints. Required in
+  // production; empty in dev disables auth.
+  DASHBOARD_USERNAME: z.string().min(1).optional(),
+  DASHBOARD_PASSWORD: z.string().min(1).optional(),
   // Comma-separated host allowlist for outbound fetches (SSRF guard).
   ALLOWED_HOSTS: z
     .string()
@@ -98,6 +102,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): Readonly<Config> {
   if (!parsed.success) {
     const detail = parsed.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`).join("; ");
     throw new Error(`Invalid configuration: ${detail}`);
+  }
+  // The operational endpoints must not be exposed unauthenticated in prod.
+  if (parsed.data.NODE_ENV === "production" && (!parsed.data.DASHBOARD_USERNAME || !parsed.data.DASHBOARD_PASSWORD)) {
+    throw new Error("DASHBOARD_USERNAME and DASHBOARD_PASSWORD are required when NODE_ENV=production");
   }
   return deepFreeze(parsed.data);
 }

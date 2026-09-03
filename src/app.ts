@@ -10,6 +10,7 @@ import type { Db } from "./db/client.ts";
 import type { LLMClient } from "./llm/client.ts";
 import type { Metrics } from "./observability/metrics.ts";
 import { metricsPlugin } from "./observability/routes.ts";
+import type { BasicAuthConfig } from "./observability/auth.ts";
 import type { PlatformClient } from "./platform/types.ts";
 import { createOutcomeQueue } from "./queue/outcome.ts";
 import { createReviewQueue } from "./queue/enqueue.ts";
@@ -25,6 +26,10 @@ export interface AppDeps {
   llm: LLMClient;
   dashboardQueries: DashboardQueries;
   metrics: Metrics;
+  // Computes learning_lag from the event log; null when no rule has activated.
+  getLearningLag: () => Promise<number | null>;
+  // Basic auth for the operational endpoints; empty in dev disables it.
+  auth: BasicAuthConfig;
 }
 
 export function buildApp(config: Readonly<Config>, logger: Logger, deps: AppDeps): AppInstance {
@@ -104,8 +109,8 @@ export function buildApp(config: Readonly<Config>, logger: Logger, deps: AppDeps
     });
   });
 
-  app.register(dashboardPlugin, { queries: deps.dashboardQueries });
-  app.register(metricsPlugin, { metrics: deps.metrics });
+  app.register(dashboardPlugin, { queries: deps.dashboardQueries, auth: deps.auth });
+  app.register(metricsPlugin, { metrics: deps.metrics, getLearningLag: deps.getLearningLag, auth: deps.auth });
   app.register(webhookPlugin, {
     config,
     store: createWebhookStore(deps.db),

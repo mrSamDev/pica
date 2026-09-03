@@ -144,6 +144,8 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
       llm: createFakeLlm(),
       dashboardQueries: createDashboardQueries(db, queue, queue),
       metrics: createFakeMetrics(),
+      getLearningLag: async () => null,
+      auth: {},
     });
 
     const payload = JSON.stringify({

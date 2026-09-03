@@ -1,5 +1,5 @@
 import type { Queue } from "bullmq";
-import { desc } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 
 import type { Db } from "../db/client.ts";
 import { findings, findingOutcomes, learningEvents, reviews } from "../db/schema.ts";
@@ -30,33 +30,44 @@ export interface DashboardQueries {
 export function createDashboardQueries(db: Db, queue: Queue, outcomeQueue: Queue): DashboardQueries {
   return {
     async countReviewsByStatus() {
-      const rows = await db.select({ status: reviews.status }).from(reviews);
+      // GROUP BY, not a full scan: the dashboard must stay cheap as the tables
+      // grow. count(*)::int — pg returns bigint as a string otherwise.
+      const rows = await db
+        .select({ status: reviews.status, count: sql<number>`count(*)::int` })
+        .from(reviews)
+        .groupBy(reviews.status);
       const counts = { running: 0, completed: 0, failed: 0 };
       for (const row of rows) {
-        if (row.status === "running") counts.running++;
-        else if (row.status === "done") counts.completed++;
-        else if (row.status === "failed") counts.failed++;
+        if (row.status === "running") counts.running = row.count;
+        else if (row.status === "done") counts.completed = row.count;
+        else if (row.status === "failed") counts.failed = row.count;
       }
       return counts;
     },
     async countFindingsByStatus() {
-      const rows = await db.select({ status: findings.status }).from(findings);
+      const rows = await db
+        .select({ status: findings.status, count: sql<number>`count(*)::int` })
+        .from(findings)
+        .groupBy(findings.status);
       const counts = { posted: 0, suppressed: 0, duplicate: 0 };
       for (const row of rows) {
-        if (row.status === "posted") counts.posted++;
-        else if (row.status === "suppressed") counts.suppressed++;
-        else if (row.status === "duplicate") counts.duplicate++;
+        if (row.status === "posted") counts.posted = row.count;
+        else if (row.status === "suppressed") counts.suppressed = row.count;
+        else if (row.status === "duplicate") counts.duplicate = row.count;
       }
       return counts;
     },
     async countOutcomesByStatus() {
-      const rows = await db.select({ status: findingOutcomes.status }).from(findingOutcomes);
+      const rows = await db
+        .select({ status: findingOutcomes.status, count: sql<number>`count(*)::int` })
+        .from(findingOutcomes)
+        .groupBy(findingOutcomes.status);
       const counts: OutcomeCounts = { posted: 0, replied: 0, resolved: 0, dismissed: 0 };
       for (const row of rows) {
-        if (row.status === "posted") counts.posted++;
-        else if (row.status === "replied") counts.replied++;
-        else if (row.status === "resolved") counts.resolved++;
-        else if (row.status === "dismissed") counts.dismissed++;
+        if (row.status === "posted") counts.posted = row.count;
+        else if (row.status === "replied") counts.replied = row.count;
+        else if (row.status === "resolved") counts.resolved = row.count;
+        else if (row.status === "dismissed") counts.dismissed = row.count;
       }
       return counts;
     },

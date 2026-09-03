@@ -1,4 +1,5 @@
 import type { Queue } from "bullmq";
+import { Gauge } from "prom-client";
 
 import type { DashboardQueries } from "../../src/dashboard/projection.ts";
 import type { Db } from "../../src/db/client.ts";
@@ -9,10 +10,14 @@ import type { PlatformClient } from "../../src/platform/types.ts";
 export function createFakeMetrics(): Metrics {
   // SAFETY: tests never read metric values; a no-op counter satisfies the type.
   const noop = { inc: () => {} } as Metrics["findingsPosted"];
+  // SAFETY: a real, unregistered gauge satisfies the type without a cast; tests
+  // never scrape it.
+  const noopGauge = new Gauge({ name: "learning_lag_seconds", help: "test", registers: [] });
   return {
     findingsPosted: noop,
     findingsSuppressed: noop,
     outcome: noop,
+    learningLag: noopGauge,
     // SAFETY: tests never scrape the registry.
     registry: {} as Metrics["registry"],
   };

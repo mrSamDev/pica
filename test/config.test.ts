@@ -60,6 +60,13 @@ describe("config", () => {
     expect(() => loadConfig({ ...validEnv(), REPO_CONFIG: '{"owner/repo":{"mode":"bogus"}}' })).toThrow();
   });
 
+  it("requires dashboard credentials in production", () => {
+    expect(() => loadConfig({ ...validEnv(), NODE_ENV: "production" })).toThrow(/DASHBOARD_USERNAME/);
+    expect(() => loadConfig({ ...validEnv(), NODE_ENV: "production", DASHBOARD_USERNAME: "admin" })).toThrow(/DASHBOARD_PASSWORD/);
+    // Both set -> valid.
+    expect(() => loadConfig({ ...validEnv(), NODE_ENV: "production", DASHBOARD_USERNAME: "admin", DASHBOARD_PASSWORD: "secret" })).not.toThrow();
+  });
+
   it("per-repo override wins over global default", () => {
     const config = loadConfig({
       ...validEnv(),

@@ -8,6 +8,7 @@ import { createDb } from "./db/client.ts";
 import { createOpenRouterLLM } from "./llm/openrouter.ts";
 import { createLogger } from "./observability/logger.ts";
 import { createMetrics } from "./observability/metrics.ts";
+import { getLearningLagSeconds } from "./learning/lag.ts";
 import { createBitbucketClient } from "./platform/bitbucket.ts";
 import { createGitHubClient } from "./platform/github.ts";
 import { pollFeedback } from "./platform/poll.ts";
@@ -45,6 +46,8 @@ const app = buildApp(config, logger, {
   llm,
   dashboardQueries: createDashboardQueries(db, queue, outcomeQueue),
   metrics,
+  getLearningLag: () => getLearningLagSeconds(db),
+  auth: { username: config.DASHBOARD_USERNAME, password: config.DASHBOARD_PASSWORD },
 });
 
 // Feedback poller. The advisory lock makes overlapping runs harmless, so a

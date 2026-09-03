@@ -24,6 +24,8 @@ function makeApp(queries: DashboardQueries) {
     llm: createFakeLlm(),
     dashboardQueries: queries,
     metrics: createFakeMetrics(),
+    getLearningLag: async () => null,
+    auth: {},
   });
 }
 
@@ -96,6 +98,50 @@ describe("dashboard", () => {
     const after = await app.inject({ method: "GET", url: "/api/dashboard" });
     expect(after.json().system.reviewsRunning).toBe(0);
     expect(after.json().system.reviewsCompleted).toBe(1);
+    await app.close();
+  });
+});
+
+describe("dashboard auth", () => {
+  function makeAuthedApp() {
+    return buildApp(config, logger, {
+      db: createUnusedDb(),
+      queue: createUnusedQueue(),
+      platform: createFakePlatform(),
+      llm: createFakeLlm(),
+      dashboardQueries: createFakeDashboardQueries(),
+      metrics: createFakeMetrics(),
+      getLearningLag: async () => null,
+      auth: { username: "admin", password: "secret" },
+    });
+  }
+
+  it("rejects unauthenticated requests with 401", async () => {
+    const app = makeAuthedApp();
+    const res = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(res.statusCode).toBe(401);
+    expect(res.headers["www-authenticate"]).toContain("Basic");
+    await app.close();
+  });
+
+  it("rejects wrong credentials with 401", async () => {
+    const app = makeAuthedApp();
+    const res = await app.inject({ method: "GET", url: "/api/dashboard", headers: { authorization: `Basic ${Buffer.from("admin:wrong").toString("base64")}` } });
+    expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("serves the dashboard with valid credentials", async () => {
+    const app = makeAuthedApp();
+    const res = await app.inject({ method: "GET", url: "/api/dashboard", headers: { authorization: `Basic ${Buffer.from("admin:secret").toString("base64")}` } });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("gates /metrics too", async () => {
+    const app = makeAuthedApp();
+    const res = await app.inject({ method: "GET", url: "/metrics" });
+    expect(res.statusCode).toBe(401);
     await app.close();
   });
 });
