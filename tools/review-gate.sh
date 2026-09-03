@@ -68,7 +68,9 @@ run_pi() {
     "@$input" \
     "Review the entire attached git diff. Cover every file and every hunk — do not sample or skip any part. End with the required JSON verdict." > "$out_file" 2>&1 &
   local pid=$!
-  ( sleep "$timeout" && kill "$pid" 2>/dev/null ) &
+  # redirect watcher fds: otherwise orphaned sleep keeps pre-commit's
+  # stdout/stderr pipes open and git commit blocks until timeout expires
+  ( sleep "$timeout" && kill "$pid" 2>/dev/null ) >/dev/null 2>&1 &
   local watcher=$!
   wait "$pid"
   local exit_code=$?
