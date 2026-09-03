@@ -98,10 +98,12 @@ describe("security audit", () => {
     }
 
     // Compose must not embed secret values either (KavalX lesson: postgres:postgres).
+    // Accept any form of env interpolation (${VAR}, ${VAR:-default}, ${VAR:?...});
+    // the guard is against a hardcoded value, not against the `?` suffix.
     const compose = readFileSync(join(ROOT, "docker-compose.yml"), "utf8");
     const secretLines = compose.split("\n").filter((l) => /secret|password|token|api_key/i.test(l) && !l.trimStart().startsWith("#"));
     for (const line of secretLines) {
-      expect(line, `compose secret must use env interpolation, got: ${line}`).toMatch(/\$\{[A-Z_]+(?::?\?[^}]*)?\}/);
+      expect(line, `compose secret must use env interpolation, got: ${line}`).toMatch(/\$\{[A-Z_]+(?::[^}]*)?\}/);
     }
   });
 

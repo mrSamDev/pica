@@ -59,11 +59,15 @@ services:
   # Cloudflare Tunnel: remotely managed (TUNNEL_TOKEN, no config file on disk).
   # Route your public hostname to http://app:3000 in the CF dashboard.
   # Start with: docker compose --profile tunnel up -d
+  # TUNNEL_TOKEN is optional-interpolated (${VAR:-}) so `docker compose up` for
+  # the app alone works without a tunnel. `:?` below would abort the whole
+  # stack at parse time even when the tunnel profile is not running. If the
+  # tunnel runs without the token, cloudflared fails fast at startup.
   tunnel:
     image: cloudflare/cloudflared:latest
     command: tunnel run
     environment:
-      TUNNEL_TOKEN: ${TUNNEL_TOKEN:?set TUNNEL_TOKEN}
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
     depends_on:
       - app
     profiles:

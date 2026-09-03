@@ -55,6 +55,9 @@ docker compose --profile tunnel up -d
 ```
 
 `cloudflared` talks out to Cloudflare; nothing listens on a public local port.
+The base `docker compose up -d` (step 3 of the previous section) does **not**
+need `TUNNEL_TOKEN` — it is only required by the tunnel profile. Set it before
+running the tunnel; `cloudflared` exits fast if it is missing.
 
 ## 5. Configure the platform webhook
 
