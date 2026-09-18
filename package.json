@@ -16,7 +16,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "cli": "node --env-file-if-exists=.env src/cli/main.ts",
-    "rebuild": "node --env-file-if-exists=.env src/cli/main.ts rebuild-read-model"
+    "rebuild": "node --env-file-if-exists=.env src/cli/main.ts rebuild-read-model",
+    "webhook:replay": "node --env-file-if-exists=.env tools/replay-webhook.ts"
   },
   "dependencies": {
     "bullmq": "6.3.4",

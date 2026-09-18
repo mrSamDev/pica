@@ -10,3 +10,4 @@ coverage/
 .pi/
 secrets/
 *.pem
+docker-compose.override.yml
