@@ -1,3 +1,5 @@
+import { eq } from "drizzle-orm";
+
 import type { Db } from "../../db/client.ts";
 import { learningEvents } from "../../db/schema.ts";
 
@@ -21,4 +23,10 @@ export async function emitEvent(db: Db, event: LearningEvent): Promise<void> {
       payload: event.payload,
     })
     .onConflictDoNothing();
+}
+
+/** True when an event with this key was already recorded. */
+export async function hasEvent(db: Db, eventKey: string): Promise<boolean> {
+  const rows = await db.select({ id: learningEvents.id }).from(learningEvents).where(eq(learningEvents.eventKey, eventKey)).limit(1);
+  return rows.length > 0;
 }

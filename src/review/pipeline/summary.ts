@@ -13,8 +13,7 @@ export function severityOrder(a: Finding, b: Finding): number {
   return severityRank[a.severity] - severityRank[b.severity];
 }
 
-/**
- * Render a capped, severity-prioritized summary of would-be findings. The
+/** Render a capped, severity-prioritized summary of would-be findings. The
  * header states the full count so the team sees the spam that was avoided.
  */
 export function buildSummary(findings: Finding[], cap: number = SUMMARY_CAP): string {
@@ -24,4 +23,9 @@ export function buildSummary(findings: Finding[], cap: number = SUMMARY_CAP): st
   const header = count > cap ? `${count} findings detected, showing top ${shown.length}` : `${count} finding${count === 1 ? "" : "s"} detected`;
   const lines = shown.map((finding) => `- [${finding.severity}] ${finding.filePath}:${finding.lineStart} — ${finding.message}`);
   return [header, ...lines].join("\n");
+}
+
+/** The single comment a clean review leaves on the PR. */
+export function buildCleanSummary(): string {
+  return "Review complete. No new findings on this diff. Everything looks fine.";
 }

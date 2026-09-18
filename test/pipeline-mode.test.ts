@@ -168,6 +168,23 @@ describe.skipIf(!dockerAvailable)("pipeline mode gating", () => {
     expect(rows.every((row) => row.status === "posted")).toBe(true);
   });
 
+  it("post mode with zero findings posts one clean comment", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const reviewId = "99999999-9999-9999-9999-999999999999";
+    await seedReview(reviewId, "post");
+    const { platform, inline, pr } = makePlatform();
+    const result = await runReview({ db, platform, llm: makeLlm([]), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "54", "post"));
+
+    expect(result.posted).toBe(0);
+    expect(inline).toHaveLength(0);
+    expect(pr).toHaveLength(1);
+    expect(pr[0]?.content).toBe("Review complete. No new findings on this diff. Everything looks fine.");
+
+    // A worker retry must not post the clean comment twice.
+    await runReview({ db, platform, llm: makeLlm([]), config, metrics: createFakeMetrics() }, makeRequest(reviewId, "54", "post"));
+    expect(pr).toHaveLength(1);
+  });
+
   it("dry-run mode prints findings, posts nothing", async () => {
     if (db === undefined) throw new Error("db not initialized");
     const reviewId = "44444444-4444-4444-4444-444444444444";

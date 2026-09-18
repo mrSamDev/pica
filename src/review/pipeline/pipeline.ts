@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { Config } from "../../config.ts";
 import type { Db } from "../../db/client.ts";
 import { ensureOutcome } from "../../db/outcomes.ts";
-import { emitEvent } from "../../learning/events/emit.ts";
+import { emitEvent, hasEvent } from "../../learning/events/emit.ts";
 import { getReviewLearningContext, RETRIEVAL_VERSION, computeRulesVersion } from "../../learning/retrieval/retrieval.ts";
 import { selectProbeCandidates } from "../../learning/retrieval/probes.ts";
 import type { LLMClient } from "../../llm/client.ts";
@@ -16,7 +16,7 @@ import type { Finding, ReviewRequest } from "../types.ts";
 import { chunkDiff } from "./chunk.ts";
 import { withFeedbackFooter } from "./comment.ts";
 import { ensurePattern, fetchPostedCommentId, fetchPriorFindings, insertFindings, insertFindingsReturning, insertPostedComment, recordLlmCall, recordReviewRepro, toFindingRow, updateFindingStatus, type FindingRow } from "./queries.ts";
-import { buildSummary, severityOrder } from "./summary.ts";
+import { buildCleanSummary, buildSummary, severityOrder } from "./summary.ts";
 
 export interface ReviewDeps {
   db: Db;
@@ -174,6 +174,15 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
         postedProbes.push({ patternId: finding.patternUuid, findingId, filePath: finding.filePath, repo: request.repo });
       } else {
         deps.metrics.findingsPosted.inc();
+      }
+    }
+    // A clean review still says so on the PR; silence reads like a dead bot.
+    // The marker event makes a worker retry skip the repost.
+    if (postOrder.length === 0) {
+      const cleanKey = `review:${request.reviewId}:clean-comment`;
+      if (!(await hasEvent(deps.db, cleanKey))) {
+        await deps.platform.createPrComment(request.repo, request.prId, buildCleanSummary());
+        await emitEvent(deps.db, { eventKey: cleanKey, repo: request.repo, eventType: "review.clean-comment", aggregateId: `review:${request.reviewId}`, payload: {} });
       }
     }
   }
