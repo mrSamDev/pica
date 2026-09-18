@@ -53,7 +53,10 @@ export function createOpenRouterLLM(deps: OpenRouterDeps): LLMClient {
       });
 
       if (!response.ok) {
-        throw new Error(`LLM request failed: ${response.status}`);
+        // The status alone hides the provider's reason: a bare 404 masked
+        // "this model is unavailable for free" until the body was inspected.
+        const detail = await response.text().catch(() => "");
+        throw new Error(`LLM request failed: ${response.status}: ${detail.slice(0, 200)}`);
       }
 
       const parsed = openRouterResponseSchema.safeParse(await response.json());
