@@ -39,7 +39,7 @@ function dropStatus(reason: "suppressed" | "suppressed-glob" | "duplicate" | "re
 }
 
 export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promise<ReviewResult> {
-  const rawDiff = await deps.platform.fetchDiff(request.diffHref);
+  const rawDiff = await deps.platform.fetchDiff(request.repo, request.prId);
   const chunks = chunkDiff(rawDiff);
 
   // Read model (§5.8): active rules + memory context are injected into every

@@ -88,7 +88,6 @@ async function runDryRunReview(deps: CliDeps, command: Extract<Command, { name: 
     repo: command.repo,
     prId: command.prId,
     commitSha: "dry-run",
-    diffHref: command.diffHref,
     platform: deps.config.PLATFORM,
     mode: "dry-run",
     postingCap: 0,

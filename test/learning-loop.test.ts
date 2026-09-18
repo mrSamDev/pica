@@ -169,7 +169,7 @@ describe.skipIf(!dockerAvailable)("learning loop end-to-end", () => {
     };
     const reviewId = randomUUID();
     await db.insert(reviews).values({ id: reviewId, repo, prId: prOfReview, commitSha: "abc", status: "running", mode: "post" });
-    const request: ReviewRequest = { reviewId, repo, prId: prOfReview, commitSha: "abc", diffHref: "https://api.github.com/repos/owner/repo/pulls/1", platform: "github", mode: "post", postingCap: 10, summaryComment: false };
+    const request: ReviewRequest = { reviewId, repo, prId: prOfReview, commitSha: "abc", platform: "github", mode: "post", postingCap: 10, summaryComment: false };
 
     const result = await runReview({ db, platform: makePlatform(), llm, config, metrics: createFakeMetrics() }, request);
 

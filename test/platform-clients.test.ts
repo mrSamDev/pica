@@ -11,6 +11,38 @@ function resp(body: string, status = 200): Response {
 
 const target = { path: "src/a.ts", line: 1, commitSha: "abc" };
 
+describe("platform clients: fetchDiff (private repos: API route, not the github.com web route)", () => {
+  it("github: fetches the pulls API with the diff Accept header", async () => {
+    const seen: Array<{ url: string; accept?: string }> = [];
+    const gh = createGitHubClient({
+      token: "t",
+      allowedHosts: allowed,
+      maxDiffBytes: 1000,
+      fetchImpl: async (url, init) => {
+        seen.push({ url: String(url), accept: init?.headers ? (new Headers(init.headers).get("accept") ?? undefined) : undefined });
+        return resp("diff --git");
+      },
+    });
+    expect(await gh.fetchDiff("o/r", "42")).toBe("diff --git");
+    expect(seen).toEqual([{ url: "https://api.github.com/repos/o/r/pulls/42", accept: "application/vnd.github.v3.diff" }]);
+  });
+
+  it("bitbucket: fetches the pullrequests diff API", async () => {
+    const seen: string[] = [];
+    const bb = createBitbucketClient({
+      token: "t",
+      allowedHosts: allowed,
+      maxDiffBytes: 1000,
+      fetchImpl: async (url) => {
+        seen.push(String(url));
+        return resp("diff --git");
+      },
+    });
+    expect(await bb.fetchDiff("o/r", "42")).toBe("diff --git");
+    expect(seen).toEqual(["https://api.bitbucket.org/2.0/repositories/o/r/pullrequests/42/diff"]);
+  });
+});
+
 describe("platform clients: comment POST", () => {
   it("throws on an unparseable comment POST instead of storing id '' (unattributable comment)", async () => {
     const gh = createGitHubClient({ token: "t", allowedHosts: allowed, maxDiffBytes: 1000, fetchImpl: async () => resp("{}") });

@@ -25,7 +25,6 @@ export interface ReviewRequest {
   repo: string;
   prId: string;
   commitSha: string;
-  diffHref: string;
   platform: "github" | "bitbucket";
   // Posting behavior, snapshotted at enqueue time from per-repo config.
   mode: ReviewMode;

@@ -7,7 +7,6 @@ export const webhookPayloadSchema = z.object({
   repo: z.string().min(1),
   prId: z.string().min(1),
   commitSha: z.string().min(1),
-  diffHref: z.string().url(),
 });
 
 export type WebhookPayload = z.infer<typeof webhookPayloadSchema>;

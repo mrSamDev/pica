@@ -48,8 +48,8 @@ function parseCreatedComment(body: string): string {
 export function createBitbucketClient(deps: BitbucketDeps): PlatformClient {
   const getToken: TokenProvider = deps.tokenProvider ?? (deps.token !== undefined ? createStaticTokenProvider(deps.token) : () => Promise.reject(new Error("platform token not configured")));
   return {
-    async fetchDiff(diffHref) {
-      return safeFetch(diffHref, {
+    async fetchDiff(repo, prId) {
+      return safeFetch(`${API_BASE}/repositories/${repo}/pullrequests/${prId}/diff`, {
         allowedHosts: deps.allowedHosts,
         maxBytes: deps.maxDiffBytes,
         authToken: await getToken(),

@@ -138,7 +138,7 @@ describe("GitHub native webhooks", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toEqual({ received: true });
     expect(queue.enqueued).toHaveLength(1);
-    expect(queue.enqueued[0]).toMatchObject({ repo: "owner/repo", prId: "42", commitSha: "abc123", diffHref: "https://github.com/owner/repo/pull/42.diff", platform: "github" });
+    expect(queue.enqueued[0]).toMatchObject({ repo: "owner/repo", prId: "42", commitSha: "abc123", platform: "github" });
     expect(store.reviews).toHaveLength(1);
     await app.close();
   });
@@ -246,7 +246,7 @@ describe("GitHub native webhooks", () => {
     const store = makeStore();
     const queue = makeQueue();
     const { app } = makeApp(store, queue);
-    const payload = JSON.stringify({ repo: "owner/repo", prId: "42", commitSha: "abc123", diffHref: "https://api.github.com/repos/owner/repo/pulls/42" });
+    const payload = JSON.stringify({ repo: "owner/repo", prId: "42", commitSha: "abc123" });
     const res = await app.inject({
       method: "POST",
       url: "/webhooks/github",

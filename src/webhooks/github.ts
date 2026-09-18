@@ -23,7 +23,6 @@ export const pullRequestEventSchema = z.object({
   pull_request: z.object({
     number: z.number(),
     head: z.object({ sha: z.string().min(1) }),
-    diff_url: z.string().url(),
   }),
   repository: repositorySchema,
 });
@@ -105,7 +104,6 @@ export function toReviewRequestFromPullRequest(event: z.infer<typeof pullRequest
     repo: event.repository.full_name,
     prId: String(event.pull_request.number),
     commitSha: event.pull_request.head.sha,
-    diffHref: event.pull_request.diff_url,
   };
 }
 
