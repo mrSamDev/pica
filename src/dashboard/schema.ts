@@ -48,6 +48,19 @@ export const dashboardSchema = {
             },
           },
         },
+        failedReviews: {
+          type: "array",
+          items: {
+            type: "object",
+            properties: {
+              jobId: { type: "string" },
+              repo: { type: "string" },
+              prId: { type: "string" },
+              error: { type: "string" },
+              completedAt: { type: ["string", "null"] },
+            },
+          },
+        },
         recentActivity: { type: "array" },
       },
     },
