@@ -1,0 +1,11 @@
+# Dokploy/Nixpacks build config.
+#
+# corepack 0.24.1 (nixpacks default) crashes launching pnpm 11's ESM bin
+# on Node 24 with ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING. Install pnpm
+# directly via npm instead of routing through corepack.
+
+[phases.install]
+commands = ["npm install -g pnpm@11.25.0", "pnpm i --frozen-lockfile"]
+
+[start]
+cmd = "pnpm run start"
