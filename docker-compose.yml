@@ -8,6 +8,10 @@ services:
     build: .
     environment:
       NODE_ENV: production
+      # Explicit so the Cloudflare tunnel ingress port and the app never drift
+      # apart when the VPS copy of this file differs from the repo.
+      PORT: ${PORT:-3000}
+      HOST: ${HOST:-0.0.0.0}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/pica
       REDIS_URL: redis://redis:6379
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET}
@@ -21,6 +25,9 @@ services:
       GITHUB_INSTALLATION_ID: ${GITHUB_INSTALLATION_ID:-}
       PLATFORM: ${PLATFORM:-github}
       LLM_MODEL: ${LLM_MODEL:-deepseek/deepseek-chat-v3}
+      # Free/slow models on OpenRouter regularly exceed 60s; 3 min keeps the
+      # review alive without letting a hung call pin a worker forever.
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-180000}
       DASHBOARD_USERNAME: ${DASHBOARD_USERNAME:?set DASHBOARD_USERNAME}
       DASHBOARD_PASSWORD: ${DASHBOARD_PASSWORD:?set DASHBOARD_PASSWORD}
     depends_on:
@@ -30,7 +37,8 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/health"]
+      # Keep in sync with PORT above so the probe never points at a dead port.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:${PORT:-3000}/health"]
       interval: 10s
       timeout: 5s
       retries: 6
