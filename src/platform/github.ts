@@ -48,11 +48,16 @@ function parseCreatedComment(body: string): string {
 export function createGitHubClient(deps: GitHubDeps): PlatformClient {
   const getToken: TokenProvider = deps.tokenProvider ?? (deps.token !== undefined ? createStaticTokenProvider(deps.token) : () => Promise.reject(new Error("platform token not configured")));
   return {
-    async fetchDiff(diffHref) {
-      return safeFetch(diffHref, {
+    // The webhook's pull_request.diff_url points at a github.com web route,
+    // which 404s for private repos even with a token (installation tokens only
+    // authenticate against api.github.com). The API returns the same diff via
+    // content negotiation.
+    async fetchDiff(repo, prId) {
+      return safeFetch(`${API_BASE}/repos/${repo}/pulls/${prId}`, {
         allowedHosts: deps.allowedHosts,
         maxBytes: deps.maxDiffBytes,
         authToken: await getToken(),
+        accept: "application/vnd.github.v3.diff",
         timeoutMs: deps.timeoutMs,
         fetchImpl: deps.fetchImpl,
       });

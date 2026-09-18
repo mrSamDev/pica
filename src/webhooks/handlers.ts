@@ -5,7 +5,7 @@ import { handleOutcomeEvent, type OutcomeEvent } from "./outcome.ts";
 import type { WebhookDeps } from "./types.ts";
 
 // The normalized review path, shared by GitHub-native deliveries and any
-// sender that already speaks the {repo, prId, commitSha, diffHref} contract.
+// sender that already speaks the {repo, prId, commitSha} contract.
 export async function handleReviewRequest(deps: WebhookDeps, platform: "github" | "bitbucket", payload: WebhookPayload) {
   const repoConfig = getRepoConfig(deps.config, payload.repo);
   const request = toReviewRequest(payload, platform, repoConfig);

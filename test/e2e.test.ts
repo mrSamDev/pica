@@ -149,7 +149,6 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
       repo: "owner/repo",
       prId: "42",
       commitSha: "abc123",
-      diffHref: "https://api.github.com/repos/owner/repo/pulls/42",
     });
     const signature = `sha256=${createHmac("sha256", config.WEBHOOK_SECRET).update(payload).digest("hex")}`;
 

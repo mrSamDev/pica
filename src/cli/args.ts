@@ -7,7 +7,7 @@ import { z } from "zod";
 import type { ManualRulePayload } from "../learning/rules/manual.ts";
 
 export type Command =
-  | { name: "review"; repo: string; prId: string; diffHref: string; dryRun: boolean }
+  | { name: "review"; repo: string; prId: string; dryRun: boolean }
   | { name: "explain-rule"; repo: string; ruleId?: string; patternId?: string }
   | { name: "rule-add"; repo: string; ruleType: string; glob: string | null; payload: ManualRulePayload }
   | { name: "rule-retire"; repo: string; ruleId?: string; patternId?: string; glob?: string; retiredBy: string }
@@ -18,7 +18,7 @@ export type Command =
 
 const USAGE = `usage: review-agent <command> [args]
 
-  review --dry-run --repo <repo> --pr <id> --diff-href <url>
+  review --dry-run --repo <repo> --pr <id>
   explain-rule <repo> [--rule <id> | --pattern <uuid>]
   rule add <repo> (--ignore <glob> | --emphasize <pattern> | --style <text> | --scope <prefix>) [--reason <text>] [--review-depth <d>]
   rule retire <repo> (--rule <id> | --pattern <uuid> | --ignore <glob>) [--by <user>]
@@ -82,7 +82,7 @@ export function parseArgs(argv: string[]): Command {
       if (flags.get("dry-run") !== true) {
         throw new Error("only --dry-run is supported in this phase\n" + USAGE);
       }
-      return { name: "review", repo: required(flags, "repo"), prId: required(flags, "pr"), diffHref: required(flags, "diff-href"), dryRun: true };
+      return { name: "review", repo: required(flags, "repo"), prId: required(flags, "pr"), dryRun: true };
     }
     case "explain-rule": {
       const repo = positionals[0];

@@ -72,7 +72,6 @@ const payload = JSON.stringify({
   repo: "owner/repo",
   prId: "42",
   commitSha: "abc123",
-  diffHref: "https://api.github.com/repos/owner/repo/pulls/42",
 });
 
 describe("webhook HMAC", () => {

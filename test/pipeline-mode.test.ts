@@ -89,7 +89,6 @@ function makeRequest(reviewId: string, prId: string, mode: ReviewMode, overrides
     repo: "owner/repo",
     prId,
     commitSha: "abc123",
-    diffHref: "https://api.github.com/repos/owner/repo/pulls/42",
     platform: "github",
     mode,
     postingCap: 10,

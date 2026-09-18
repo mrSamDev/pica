@@ -79,7 +79,7 @@ describe.skipIf(!dockerAvailable)("§5.7 ε-probing: suppressed patterns keep ge
       getCommentState: async () => ({ resolved: false, deleted: false, replyCount: 0 }),
     };
     const llm: LLMClient = { review: async () => JSON.stringify([finding]) };
-    const request = { reviewId, repo, prId, commitSha: "abc", diffHref: "https://x", platform: "github" as const, mode: "post" as const, postingCap, summaryComment: false };
+    const request = { reviewId, repo, prId, commitSha: "abc", platform: "github" as const, mode: "post" as const, postingCap, summaryComment: false };
 
     await runReview({ db: d, platform, llm, config, metrics: createFakeMetrics() }, request);
     return capturedComments;

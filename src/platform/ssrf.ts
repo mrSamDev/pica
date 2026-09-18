@@ -2,6 +2,7 @@ export interface SafeFetchOptions {
   allowedHosts: ReadonlySet<string>;
   maxBytes: number;
   authToken?: string;
+  accept?: string;
   fetchImpl?: typeof fetch;
   method?: string;
   body?: string;
@@ -57,6 +58,9 @@ export async function safeFetch(url: string, options: SafeFetchOptions): Promise
       const headers: Record<string, string> = {};
       if (options.authToken) {
         headers["Authorization"] = `Bearer ${options.authToken}`;
+      }
+      if (options.accept) {
+        headers["Accept"] = options.accept;
       }
       if (options.body) {
         headers["Content-Type"] = "application/json";

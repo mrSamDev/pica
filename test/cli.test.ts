@@ -29,7 +29,7 @@ const FINDING: Finding = { filePath: "src/auth.ts", lineStart: 40, lineEnd: 40, 
 
 describe("cli args", () => {
   it("parses each command", () => {
-    expect(parseArgs(["review", "--dry-run", "--repo", "owner/api", "--pr", "142", "--diff-href", "https://x"])).toEqual({ name: "review", repo: "owner/api", prId: "142", diffHref: "https://x", dryRun: true });
+    expect(parseArgs(["review", "--dry-run", "--repo", "owner/api", "--pr", "142"])).toEqual({ name: "review", repo: "owner/api", prId: "142", dryRun: true });
     expect(parseArgs(["explain-rule", "owner/api", "--rule", "abc"])).toEqual({ name: "explain-rule", repo: "owner/api", ruleId: "abc", patternId: undefined });
     expect(parseArgs(["rule", "add", "owner/api", "--ignore", "generated/**", "--reason", "build output"])).toEqual({ name: "rule-add", repo: "owner/api", ruleType: "ignore", glob: "generated/**", payload: { reason: "build output" } });
     expect(parseArgs(["rule", "retire", "owner/api", "--rule", "abc", "--by", "sam"])).toEqual({ name: "rule-retire", repo: "owner/api", ruleId: "abc", patternId: undefined, retiredBy: "sam" });
@@ -84,7 +84,7 @@ describe.skipIf(!dockerAvailable)("cli commands", () => {
 
   it("review --dry-run prints findings + learning context (§11 output)", async () => {
     if (deps === undefined) throw new Error("deps not initialized");
-    const out = await runCommand(deps, parseArgs(["review", "--dry-run", "--repo", "owner/api", "--pr", "142", "--diff-href", "https://diff"]));
+    const out = await runCommand(deps, parseArgs(["review", "--dry-run", "--repo", "owner/api", "--pr", "142"]));
     expect(out).toContain("PR #142");
     expect(out).toContain("src/auth.ts:40");
     expect(out).toContain("JWT expiration isn't validated.");

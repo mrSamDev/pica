@@ -13,7 +13,7 @@ export interface CommentState {
 }
 
 export interface PlatformClient {
-  fetchDiff(diffHref: string): Promise<string>;
+  fetchDiff(repo: string, prId: string): Promise<string>;
   listComments(repo: string, prId: string): Promise<ExistingComment[]>;
   createInlineComment(repo: string, prId: string, target: InlineCommentTarget, content: string): Promise<{ id: string }>;
   // PR-level comment (not anchored to a line). Used for the observe-mode summary.
