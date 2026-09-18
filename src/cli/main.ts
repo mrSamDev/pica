@@ -26,7 +26,7 @@ async function main(): Promise<number> {
         config.PLATFORM === "bitbucket"
           ? createBitbucketClient({ tokenProvider: platformTokenProvider, allowedHosts: new Set(config.ALLOWED_HOSTS), maxDiffBytes: config.MAX_DIFF_BYTES })
           : createGitHubClient({ tokenProvider: platformTokenProvider, allowedHosts: new Set(config.ALLOWED_HOSTS), maxDiffBytes: config.MAX_DIFF_BYTES }),
-      llm: createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS }),
+      llm: createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS, reasoning: config.LLM_REASONING }),
       config,
       metrics: createMetrics(),
       now: () => new Date(),

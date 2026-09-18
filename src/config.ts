@@ -53,7 +53,14 @@ const configSchema = z
     GITHUB_APP_PRIVATE_KEY: z.string().optional().transform(unsetIfBlank),
     GITHUB_INSTALLATION_ID: z.string().optional().transform(unsetIfBlank),
     PLATFORM: z.enum(["github", "bitbucket"]).default("github"),
-    LLM_MODEL: z.string().default("deepseek/deepseek-chat-v3"),
+    LLM_MODEL: z.string().default("deepseek/deepseek-v4-flash-0731:free"),
+    // Ask the provider for chain-of-thought. Some reasoning models return the
+    // answer under `reasoning` and leave `content` empty, which fails the strict
+    // content schema — turn this off for non-reasoning or free-tier models.
+    LLM_REASONING: z
+      .enum(["true", "false"])
+      .default("true")
+      .transform((value) => value === "true"),
     // Abort an LLM call that exceeds this budget; a hung provider must not hold
     // a review worker forever.
     LLM_TIMEOUT_MS: z.coerce.number().int().positive().default(60_000),

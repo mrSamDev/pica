@@ -44,7 +44,7 @@ const platform =
   config.PLATFORM === "github"
     ? createGitHubClient({ tokenProvider: platformTokenProvider, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES, timeoutMs: config.PLATFORM_TIMEOUT_MS })
     : createBitbucketClient({ tokenProvider: platformTokenProvider, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES, timeoutMs: config.PLATFORM_TIMEOUT_MS });
-const llm = createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS });
+const llm = createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS, reasoning: config.LLM_REASONING });
 const reviewDeps = { db, platform, llm, config, metrics };
 const worker = createReviewWorker(redis, reviewDeps, logger);
 const learnerConfig = getLearnerConfig(config);

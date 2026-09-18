@@ -55,6 +55,13 @@ describe("config", () => {
     expect(config.REPO_CONFIG).toEqual({});
   });
 
+  it("defaults LLM to the deepseek v4 flash free model with reasoning on", () => {
+    const config = loadConfig(validEnv());
+    expect(config.LLM_MODEL).toBe("deepseek/deepseek-v4-flash-0731:free");
+    expect(config.LLM_REASONING).toBe(true);
+    expect(() => loadConfig({ ...validEnv(), LLM_REASONING: "false" })).not.toThrow();
+  });
+
   it("rejects invalid REPO_CONFIG JSON", () => {
     expect(() => loadConfig({ ...validEnv(), REPO_CONFIG: "not-json" })).toThrow(/REPO_CONFIG/);
     expect(() => loadConfig({ ...validEnv(), REPO_CONFIG: '{"owner/repo":{"mode":"bogus"}}' })).toThrow();
