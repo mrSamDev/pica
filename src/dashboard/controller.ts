@@ -1,4 +1,4 @@
-import type { DashboardQueries, ProbeItem, RuleSummary, WhyDisappeared } from "./projection.ts";
+import type { DashboardQueries, FailedReview, ProbeItem, RuleSummary, WhyDisappeared } from "./projection.ts";
 import { dashboardHtml, whyHtml } from "./view.ts";
 
 export interface DashboardState {
@@ -29,6 +29,7 @@ export interface DashboardState {
     dismissalRateTrend: number[];
     probes: ProbeItem[];
   };
+  failedReviews: FailedReview[];
   recentActivity: unknown[];
 }
 
@@ -49,7 +50,7 @@ export async function getWhyState(queries: DashboardQueries, findingId: string):
 }
 
 export async function getDashboardState(queries: DashboardQueries): Promise<DashboardState> {
-  const [system, findings, outcomes, activity, queueDepth, failedJobs, rules, learningLagMs, dismissalRateTrend, probes] = await Promise.all([
+  const [system, findings, outcomes, activity, queueDepth, failedJobs, rules, learningLagMs, dismissalRateTrend, probes, failedReviews] = await Promise.all([
     queries.countReviewsByStatus(),
     queries.countFindingsByStatus(),
     queries.countOutcomesByStatus(),
@@ -60,6 +61,7 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
     queries.learningLag(),
     queries.dismissalRateTrend(),
     queries.probes(),
+    queries.failedReviews(10),
   ]);
 
   return {
@@ -85,6 +87,7 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
       dismissalRateTrend,
       probes,
     },
+    failedReviews,
     recentActivity: activity,
   };
 }

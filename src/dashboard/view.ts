@@ -17,6 +17,7 @@ export const dashboardHtml = `<!doctype html>
       .rule { padding: 0.3rem 0; border-bottom: 1px solid #1c2228; font-size: 0.86rem; }
       ul.activity { list-style: none; margin: 0; padding: 0; }
       ul.activity li { padding: 0.3rem 0; border-bottom: 1px solid #1c2228; font-size: 0.85rem; }
+      .err { color: #ff8b7d; font-size: 0.8rem; padding: 0.15rem 0; word-break: break-word; }
       .tag { color: #7fb3ff; }
       .muted { color: #5b6672; }
       a { color: #7fb3ff; }
@@ -30,6 +31,7 @@ export const dashboardHtml = `<!doctype html>
       <div class="panel"><h2>Outcomes</h2><div id="outcomes"><p class="empty">Loading…</p></div></div>
       <div class="panel"><h2>Learning</h2><div id="learning"><p class="empty">Loading…</p></div><div id="probes"></div><div id="rules"><p class="empty">Loading…</p></div></div>
       <div class="panel"><h2>Recent activity</h2><div id="activity"><p class="empty">Loading…</p></div></div>
+      <div class="panel"><h2>Failed reviews</h2><div id="failures"><p class="empty">Loading…</p></div></div>
     </div>
     <script>
       function row(k, v) { return '<div class="row"><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>'; }
@@ -79,6 +81,16 @@ export const dashboardHtml = `<!doctype html>
           activity.innerHTML = '<ul class="activity">' + state.recentActivity.map(function (a) {
             return '<li><span class="tag">' + esc(a.eventType) + '</span> <span class="muted">' + esc(a.repo) + '</span></li>';
           }).join('') + '</ul>';
+        }
+        var failures = document.getElementById('failures');
+        if (state.failedReviews.length === 0) {
+          failures.innerHTML = '<p class="empty">No failed reviews.</p>';
+        } else {
+          failures.innerHTML = state.failedReviews.map(function (f) {
+            return '<div class="rule"><code>' + esc(f.jobId) + '</code>' +
+              ' <span class="muted">' + esc(f.completedAt ? f.completedAt.slice(0, 19) : '') + '</span>' +
+              '<div class="err">' + esc(f.error) + '</div></div>';
+          }).join('');
         }
       }
       async function renderRules() {

@@ -18,8 +18,9 @@ import { createGitHubClient } from "./platform/github.ts";
 import { createPlatformTokenProvider } from "./platform/token.ts";
 import { pollFeedback } from "./platform/poll.ts";
 import { createRedisConnection } from "./queue/connection.ts";
-import { createOutcomeWorker } from "./queue/outcome.ts";
+import { createOutcomeWorker, type OutcomeJob } from "./queue/outcome.ts";
 import { createReviewWorker } from "./queue/worker.ts";
+import type { ReviewRequest } from "./review/types.ts";
 
 const config = loadConfig(process.env);
 const logger = createLogger(config);
@@ -47,6 +48,17 @@ const platform =
 const llm = createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS, reasoning: config.LLM_REASONING });
 const reviewDeps = { db, platform, llm, config, metrics };
 const worker = createReviewWorker(redis, reviewDeps, logger);
+// BullMQ emits `failed` per job and `error` for internal problems; without
+// listeners a failing review is invisible in logs (the error only lands in
+// reviews.error via updateReviewStatus).
+worker.on("failed", (job, error) => {
+  // SAFETY: the reviews queue only ever receives webhook ReviewRequest payloads.
+  const request = job?.data as ReviewRequest | undefined;
+  logger.error({ jobId: job?.id, prId: request?.prId, err: error }, "review job failed");
+});
+worker.on("error", (error) => {
+  logger.error({ err: error }, "review worker error");
+});
 const learnerConfig = getLearnerConfig(config);
 const outcomeWorker = createOutcomeWorker(
   redis,
@@ -59,6 +71,14 @@ const outcomeWorker = createOutcomeWorker(
   },
   logger,
 );
+outcomeWorker.on("failed", (job, error) => {
+  // SAFETY: the outcomes queue only ever receives webhook/poller OutcomeJob payloads.
+  const outcomeJob = job?.data as OutcomeJob | undefined;
+  logger.error({ jobId: job?.id, findingId: outcomeJob?.findingId, err: error }, "outcome job failed");
+});
+outcomeWorker.on("error", (error) => {
+  logger.error({ err: error }, "outcome worker error");
+});
 const app = buildApp(config, logger, {
   db,
   queue,

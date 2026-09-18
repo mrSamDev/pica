@@ -53,6 +53,14 @@ export interface ProbeItem {
   at: string;
 }
 
+export interface FailedReview {
+  jobId: string;
+  repo: string;
+  prId: string;
+  error: string;
+  completedAt: string | null;
+}
+
 export interface DashboardQueries {
   countReviewsByStatus(): Promise<{ running: number; completed: number; failed: number }>;
   countFindingsByStatus(): Promise<{ posted: number; suppressed: number; duplicate: number }>;
@@ -60,6 +68,7 @@ export interface DashboardQueries {
   recentActivity(limit: number): Promise<ActivityItem[]>;
   queueDepth(): Promise<number>;
   failedJobs(): Promise<number>;
+  failedReviews(limit: number): Promise<FailedReview[]>;
   countRulesByStatus(): Promise<RuleStatusCounts>;
   listRules(): Promise<RuleSummary[]>;
   learningLag(): Promise<number | null>;
@@ -130,6 +139,18 @@ export function createDashboardQueries(db: Db, queue: Queue, outcomeQueue: Queue
     async failedJobs() {
       const [reviews, outcomes] = await Promise.all([queue.getFailedCount(), outcomeQueue.getFailedCount()]);
       return reviews + outcomes;
+    },
+    async failedReviews(limit) {
+      const rows = await db.select({ repo: reviews.repo, prId: reviews.prId, commitSha: reviews.commitSha, error: reviews.error, completedAt: reviews.completedAt }).from(reviews).where(eq(reviews.status, "failed")).orderBy(desc(reviews.completedAt)).limit(limit);
+      // Mirror the BullMQ jobId format from enqueue.ts so the dashboard shows
+      // the exact id a redis-cli re-drive needs.
+      return rows.map((r) => ({
+        jobId: `review@${r.repo}@${r.prId}@${r.commitSha}`,
+        repo: r.repo,
+        prId: r.prId,
+        error: r.error ?? "unknown error",
+        completedAt: r.completedAt ? r.completedAt.toISOString() : null,
+      }));
     },
     async countRulesByStatus() {
       const rows = await db
