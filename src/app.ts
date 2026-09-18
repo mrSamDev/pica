@@ -23,6 +23,9 @@ type AppInstance = FastifyInstance<RawServerDefault, IncomingMessage, ServerResp
 export interface AppDeps {
   db: Db;
   queue: Queue;
+  // Separate queue for outcome mutations; the review worker must never see
+  // outcome payloads, and the outcome worker must never see review payloads.
+  outcomeQueue: Queue;
   platform: PlatformClient;
   llm: LLMClient;
   dashboardQueries: DashboardQueries;
@@ -120,7 +123,7 @@ export function buildApp(config: Readonly<Config>, logger: Logger, deps: AppDeps
     store: createWebhookStore(deps.db),
     queue: createReviewQueue(deps.queue),
     findFinding: (platform, commentId) => findFindingByCommentId(deps.db, platform, commentId),
-    outcomeQueue: createOutcomeQueue(deps.queue),
+    outcomeQueue: createOutcomeQueue(deps.outcomeQueue),
   });
 
   return app;

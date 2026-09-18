@@ -204,6 +204,16 @@ describe("GitHub native webhooks", () => {
     await app.close();
   });
 
+  it("a bot's own comment is ignored, not treated as human feedback", async () => {
+    const store = makeStore();
+    const { app } = makeApp(store, makeQueue());
+    const res = await post(app, JSON.stringify({ action: "created", comment: { id: 997, body: "dismiss: fp", in_reply_to_id: null, user: { login: "project-pica[bot]" } }, pull_request: { number: 42 }, repository: { full_name: "owner/repo" } }), "pull_request_review_comment");
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ received: true, ignored: true });
+    expect(store.events).toHaveLength(0);
+    await app.close();
+  });
+
   it("review comment deleted records a comment_deleted outcome event", async () => {
     const store = makeStore();
     const { app } = makeApp(store, makeQueue());

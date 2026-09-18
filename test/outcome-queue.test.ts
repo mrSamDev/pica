@@ -159,14 +159,16 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
   });
 
   it("outcome webhook route: HMAC-validated event updates the outcome end-to-end", async () => {
-    if (db === undefined || queue === undefined) throw new Error("setup not initialized");
+    if (db === undefined || queue === undefined || redis === undefined) throw new Error("setup not initialized");
     const findingId = await seedPostedFinding("c-route");
+    const reviewQueue = new Queue("reviews", { connection: redis });
     const app = buildApp(config, logger, {
       db,
-      queue,
+      queue: reviewQueue,
+      outcomeQueue: queue,
       platform: createFakePlatform(),
       llm: createFakeLlm(),
-      dashboardQueries: createDashboardQueries(db, queue, queue),
+      dashboardQueries: createDashboardQueries(db, reviewQueue, queue),
       metrics: createFakeMetrics(),
       getLearningLag: async () => null,
 
@@ -193,5 +195,6 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
 
     await waitForStatus(findingId, "resolved", 10_000);
     await app.close();
+    await reviewQueue.close();
   });
 });

@@ -20,6 +20,7 @@ function makeApp(queries: DashboardQueries) {
   return buildApp(config, logger, {
     db: createUnusedDb(),
     queue: createUnusedQueue(),
+    outcomeQueue: createUnusedQueue(),
     platform: createFakePlatform(),
     llm: createFakeLlm(),
     dashboardQueries: queries,
@@ -193,6 +194,7 @@ describe("dashboard auth", () => {
     return buildApp(config, logger, {
       db: createUnusedDb(),
       queue: createUnusedQueue(),
+      outcomeQueue: createUnusedQueue(),
       platform: createFakePlatform(),
       llm: createFakeLlm(),
       dashboardQueries: createFakeDashboardQueries(),

@@ -61,6 +61,7 @@ export function handleGitHubDelivery(deps: WebhookDeps, platform: "github" | "bi
     case "pull_request": {
       const parsed = pullRequestEventSchema.safeParse(request.body);
       if (!parsed.success) {
+        request.log.warn({ event: eventName }, "webhook rejected: invalid GitHub pull_request payload");
         return reply.status(400).send({ error: "Invalid GitHub webhook payload" });
       }
       const payload = toReviewRequestFromPullRequest(parsed.data);
@@ -72,6 +73,7 @@ export function handleGitHubDelivery(deps: WebhookDeps, platform: "github" | "bi
     case "pull_request_review_comment": {
       const parsed = reviewCommentEventSchema.safeParse(request.body);
       if (!parsed.success) {
+        request.log.warn({ event: eventName }, "webhook rejected: invalid GitHub review_comment payload");
         return reply.status(400).send({ error: "Invalid GitHub webhook payload" });
       }
       const events = toOutcomeEventsFromReviewComment(parsed.data);
@@ -83,6 +85,7 @@ export function handleGitHubDelivery(deps: WebhookDeps, platform: "github" | "bi
     case "pull_request_review_thread": {
       const parsed = reviewThreadEventSchema.safeParse(request.body);
       if (!parsed.success) {
+        request.log.warn({ event: eventName }, "webhook rejected: invalid GitHub review_thread payload");
         return reply.status(400).send({ error: "Invalid GitHub webhook payload" });
       }
       const events = toOutcomeEventsFromThread(parsed.data);
@@ -108,6 +111,12 @@ export function toReviewRequestFromPullRequest(event: z.infer<typeof pullRequest
 }
 
 export function toOutcomeEventsFromReviewComment(event: z.infer<typeof reviewCommentEventSchema>): OutcomeEvent[] {
+  // GitHub echoes the bot's own posted comments back as created events. Treating
+  // those as human feedback would let the bot reply to itself and poison the
+  // outcome stream; GitHub marks bot accounts with a "[bot]" login suffix.
+  if (event.comment.user?.login?.endsWith("[bot]")) {
+    return [];
+  }
   // edited carries no state change: the created event already recorded the
   // comment, and a re-delivered created event would dedup onto it anyway.
   if (event.action !== "created" && event.action !== "deleted") {

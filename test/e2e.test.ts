@@ -98,6 +98,7 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
   let pool: Pool | undefined;
   let redis: ReturnType<typeof createRedisConnection> | undefined;
   let queue: Queue | undefined;
+  let outcomeQueue: Queue | undefined;
   let worker: ReturnType<typeof createReviewWorker> | undefined;
   let app: ReturnType<typeof buildApp> | undefined;
   let db: Db | undefined;
@@ -112,6 +113,7 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
     redisContainer = await new RedisContainer("redis:7-alpine").start();
     redis = createRedisConnection(redisContainer.getConnectionUrl());
     queue = new Queue("reviews", { connection: redis });
+    outcomeQueue = new Queue("outcomes", { connection: redis });
 
     platform = makeFakePlatform();
     const llm = makeFakeLlm();
@@ -121,9 +123,10 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
     app = buildApp(config, logger, {
       db,
       queue,
+      outcomeQueue,
       platform,
       llm,
-      dashboardQueries: createDashboardQueries(db, queue, queue),
+      dashboardQueries: createDashboardQueries(db, queue, outcomeQueue),
       metrics: createFakeMetrics(),
       getLearningLag: async () => null,
 
@@ -136,6 +139,7 @@ describe.skipIf(!dockerAvailable)("e2e review loop", () => {
     await app?.close();
     await worker?.close();
     await queue?.close();
+    await outcomeQueue?.close();
     await redis?.quit();
     await pool?.end();
     await pg?.stop();

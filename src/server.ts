@@ -82,6 +82,7 @@ outcomeWorker.on("error", (error) => {
 const app = buildApp(config, logger, {
   db,
   queue,
+  outcomeQueue,
   platform,
   llm,
   dashboardQueries: createDashboardQueries(db, queue, outcomeQueue),

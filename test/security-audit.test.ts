@@ -119,6 +119,7 @@ describe("security audit", () => {
     const app = buildApp(config, createLogger(config), {
       db: createUnusedDb(),
       queue: createUnusedQueue(),
+      outcomeQueue: createUnusedQueue(),
       platform: createFakePlatform(),
       llm: createFakeLlm(),
       dashboardQueries: createFakeDashboardQueries(),

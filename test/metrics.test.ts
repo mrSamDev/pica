@@ -26,6 +26,7 @@ describe("metrics", () => {
     const app = buildApp(config, logger, {
       db: createUnusedDb(),
       queue: createUnusedQueue(),
+      outcomeQueue: createUnusedQueue(),
       platform: createFakePlatform(),
       llm: createFakeLlm(),
       dashboardQueries: createFakeDashboardQueries(),
@@ -54,6 +55,7 @@ describe("metrics", () => {
     const app = buildApp(config, logger, {
       db: createUnusedDb(),
       queue: createUnusedQueue(),
+      outcomeQueue: createUnusedQueue(),
       platform: createFakePlatform(),
       llm: createFakeLlm(),
       dashboardQueries: createFakeDashboardQueries(),
@@ -72,6 +74,7 @@ describe("metrics", () => {
     const app = buildApp(config, logger, {
       db: createUnusedDb(),
       queue: createUnusedQueue(),
+      outcomeQueue: createUnusedQueue(),
       platform: createFakePlatform(),
       llm: createFakeLlm(),
       dashboardQueries: createFakeDashboardQueries(),
@@ -90,6 +93,7 @@ describe("metrics", () => {
     const app = buildApp(config, logger, {
       db: createUnusedDb(),
       queue: createUnusedQueue(),
+      outcomeQueue: createUnusedQueue(),
       platform: createFakePlatform(),
       llm: createFakeLlm(),
       dashboardQueries: createFakeDashboardQueries(),
