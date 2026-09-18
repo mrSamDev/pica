@@ -16,7 +16,7 @@ import { findings, findingOutcomes, patterns, postedComments, reviews } from "..
 import { createLogger } from "../src/observability/logger.ts";
 import { createRedisConnection } from "../src/queue/connection.ts";
 import { createOutcomeQueue, createOutcomeWorker, type OutcomeQueue } from "../src/queue/outcome.ts";
-import { handleOutcomeEvent } from "../src/webhooks/outcome.ts";
+import { handleOutcomeEvent, findFindingByCommentId } from "../src/webhooks/outcome.ts";
 import { createFakeLlm, createFakeMetrics, createFakePlatform } from "./helpers/fakes.ts";
 import { isDockerAvailable } from "./helpers/docker.ts";
 
@@ -96,7 +96,8 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
   it("posted_comments links a comment to its finding (webhook outcome lands on the right finding)", async () => {
     if (outcomeQueue === undefined || db === undefined) throw new Error("setup not initialized");
     const findingId = await seedPostedFinding("c-11");
-    await handleOutcomeEvent({ db, queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_created", commentId: "c-11", content: "dismiss: this rule is useless", platform: "github" });
+    const resolvedDb = db;
+    await handleOutcomeEvent({ findFinding: (platform, commentId) => findFindingByCommentId(resolvedDb, platform, commentId), queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_created", commentId: "c-11", content: "dismiss: this rule is useless", platform: "github" });
     await waitForStatus(findingId, "dismissed", 10_000);
     const rows = await db.select({ dismissalReason: findingOutcomes.dismissalReason }).from(findingOutcomes).where(eq(findingOutcomes.findingId, findingId));
     expect(rows[0]?.dismissalReason).toBe("this rule is useless");
@@ -105,7 +106,8 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
   it("webhook outcome event updates outcome (comment resolved -> resolved)", async () => {
     if (outcomeQueue === undefined || db === undefined) throw new Error("setup not initialized");
     const findingId = await seedPostedFinding("c-4");
-    await handleOutcomeEvent({ db, queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_resolved", commentId: "c-4", resolverUser: "alice", platform: "github" });
+    const resolvedDb = db;
+    await handleOutcomeEvent({ findFinding: (platform, commentId) => findFindingByCommentId(resolvedDb, platform, commentId), queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_resolved", commentId: "c-4", resolverUser: "alice", platform: "github" });
     await waitForStatus(findingId, "resolved", 10_000);
     const rows = await db.select({ resolverUser: findingOutcomes.resolverUser }).from(findingOutcomes).where(eq(findingOutcomes.findingId, findingId));
     expect(rows[0]?.resolverUser).toBe("alice");
@@ -114,7 +116,8 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
   it("webhook outcome event updates outcome (comment deleted -> dismissed)", async () => {
     if (outcomeQueue === undefined || db === undefined) throw new Error("setup not initialized");
     const findingId = await seedPostedFinding("c-del");
-    await handleOutcomeEvent({ db, queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_deleted", commentId: "c-del", platform: "github" });
+    const resolvedDb = db;
+    await handleOutcomeEvent({ findFinding: (platform, commentId) => findFindingByCommentId(resolvedDb, platform, commentId), queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_deleted", commentId: "c-del", platform: "github" });
     await waitForStatus(findingId, "dismissed", 10_000);
   });
 
@@ -122,7 +125,11 @@ describe.skipIf(!dockerAvailable)("outcome queue", () => {
     if (outcomeQueue === undefined || db === undefined) throw new Error("setup not initialized");
     const findingId = await seedPostedFinding("c-9");
     // GitHub delivers a reply as a new comment id whose in_reply_to_id is ours.
-    await handleOutcomeEvent({ db, queue: outcomeQueue }, { repo: "owner/repo", prId: "42", eventType: "comment_created", commentId: "c-reply-9", inReplyTo: "c-9", content: "dismiss: doesn't apply to this file", platform: "github" });
+    const resolvedDb = db;
+    await handleOutcomeEvent(
+      { findFinding: (platform, commentId) => findFindingByCommentId(resolvedDb, platform, commentId), queue: outcomeQueue },
+      { repo: "owner/repo", prId: "42", eventType: "comment_created", commentId: "c-reply-9", inReplyTo: "c-9", content: "dismiss: doesn't apply to this file", platform: "github" },
+    );
     await waitForStatus(findingId, "dismissed", 10_000);
     const rows = await db.select({ dismissalReason: findingOutcomes.dismissalReason }).from(findingOutcomes).where(eq(findingOutcomes.findingId, findingId));
     expect(rows[0]?.dismissalReason).toBe("doesn't apply to this file");

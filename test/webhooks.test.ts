@@ -3,7 +3,6 @@ import Fastify, { type FastifyRequest } from "fastify";
 import { describe, expect, it } from "vitest";
 
 import { loadConfig } from "../src/config.ts";
-import type { Db } from "../src/db/client.ts";
 import { createLogger } from "../src/observability/logger.ts";
 import type { OutcomeQueue } from "../src/queue/outcome.ts";
 import type { ReviewQueue } from "../src/queue/enqueue.ts";
@@ -62,11 +61,10 @@ function makeApp(store: WebhookStore, queue: ReviewQueue) {
     request.rawBody = raw;
     return JSON.parse(raw);
   });
-  // SAFETY: the outcome route is not exercised in these HMAC tests; a stub db
-  // and queue satisfy the plugin deps without touching a real database.
-  const db = {} as Db;
+  // The review route never resolves an outcome finding in these HMAC tests;
+  // a no-op resolver satisfies the plugin deps without a database.
   const outcomeQueue: OutcomeQueue = { enqueue: async () => {} };
-  app.register(webhookPlugin, { config, store, queue, db, outcomeQueue });
+  app.register(webhookPlugin, { config, store, queue, findFinding: async () => null, outcomeQueue });
   return app;
 }
 

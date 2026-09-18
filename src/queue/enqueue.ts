@@ -9,7 +9,11 @@ export interface ReviewQueue {
 export function createReviewQueue(queue: Queue): ReviewQueue {
   return {
     async enqueue(request: ReviewRequest) {
-      await queue.add("review", request);
+      // A stable jobId makes the enqueue idempotent: a redelivered webhook
+      // re-adds the same id and BullMQ returns the existing job instead of
+      // enqueueing a second pipeline run for the same PR commit.
+      const jobId = `review@${request.repo}@${request.prId}@${request.commitSha}`;
+      await queue.add("review", request, { jobId });
     },
   };
 }

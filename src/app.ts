@@ -15,6 +15,7 @@ import type { PlatformClient } from "./platform/types.ts";
 import { createOutcomeQueue } from "./queue/outcome.ts";
 import { createReviewQueue } from "./queue/enqueue.ts";
 import { webhookPlugin } from "./webhooks/routes.ts";
+import { findFindingByCommentId } from "./webhooks/outcome.ts";
 import { createWebhookStore } from "./webhooks/store.ts";
 
 type AppInstance = FastifyInstance<RawServerDefault, IncomingMessage, ServerResponse, Logger>;
@@ -118,7 +119,7 @@ export function buildApp(config: Readonly<Config>, logger: Logger, deps: AppDeps
     config,
     store: createWebhookStore(deps.db),
     queue: createReviewQueue(deps.queue),
-    db: deps.db,
+    findFinding: (platform, commentId) => findFindingByCommentId(deps.db, platform, commentId),
     outcomeQueue: createOutcomeQueue(deps.queue),
   });
 

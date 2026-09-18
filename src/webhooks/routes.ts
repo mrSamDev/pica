@@ -1,68 +1,46 @@
 import type { FastifyPluginAsync } from "fastify";
 
-import { getRepoConfig, type Config } from "../config.ts";
-import type { Db } from "../db/client.ts";
-import type { OutcomeQueue } from "../queue/outcome.ts";
-import type { ReviewQueue } from "../queue/enqueue.ts";
-import { isWebhookPayload, parsePlatform, toReviewRequest } from "./controller.ts";
+import { isWebhookPayload, parsePlatform } from "./controller.ts";
+import { handleGitHubDelivery } from "./github.ts";
+import { handleReviewRequest } from "./handlers.ts";
 import { handleOutcomeEvent, outcomeEventSchema } from "./outcome.ts";
 import { verifySignature } from "./signature.ts";
-import type { WebhookStore } from "./types.ts";
+import type { WebhookDeps } from "./types.ts";
 
-export interface WebhookDeps {
-  config: Readonly<Config>;
-  store: WebhookStore;
-  queue: ReviewQueue;
-  db: Db;
-  outcomeQueue: OutcomeQueue;
+function singleHeader(value: string | string[] | undefined): string | undefined {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function isValidSignature(deps: WebhookDeps, request: { rawBody?: string } & { headers: Record<string, string | string[] | undefined> }): boolean {
+  const rawBody = request.rawBody ?? "";
+  const header = request.headers["x-hub-signature-256"] ?? request.headers["x-hub-signature"];
+  const signature = Array.isArray(header) ? header[0] : header;
+  return verifySignature(deps.config.WEBHOOK_SECRET, rawBody, signature);
 }
 
 export const webhookPlugin: FastifyPluginAsync<WebhookDeps> = async (app, deps) => {
   app.post<{ Params: { platform: string } }>("/webhooks/:platform", async (request, reply) => {
-    const rawBody = request.rawBody ?? "";
-    const header = request.headers["x-hub-signature-256"] ?? request.headers["x-hub-signature"];
-    const signature = Array.isArray(header) ? header[0] : header;
-    if (!verifySignature(deps.config.WEBHOOK_SECRET, rawBody, signature)) {
+    if (!isValidSignature(deps, request)) {
       return reply.status(401).send({ error: "Invalid signature" });
     }
 
     const platform = parsePlatform(request.params.platform);
-    const body = request.body;
-    if (!isWebhookPayload(body)) {
+    const eventName = singleHeader(request.headers["x-github-event"]);
+    // Native GitHub events are only valid on the github route; a bitbucket
+    // delivery carrying x-github-event falls through to the normalized path.
+    if (platform === "github" && eventName !== undefined) {
+      return handleGitHubDelivery(deps, platform, eventName, request, reply);
+    }
+
+    // Normalized sender (bridge/CI) without GitHub's event header.
+    if (!isWebhookPayload(request.body)) {
       return reply.status(400).send({ error: "Invalid webhook payload" });
     }
-    const repoConfig = getRepoConfig(deps.config, body.repo);
-    const payload = toReviewRequest(body, platform, repoConfig);
-    const eventKey = `webhook:${payload.prId}:${payload.commitSha}`;
-
-    // Idempotency: a redelivered webhook must not create a second review.
-    if (await deps.store.hasEvent(eventKey)) {
-      return { received: true, deduped: true };
-    }
-
-    await deps.store.recordEvent({
-      platform,
-      eventKey,
-      validated: true,
-      processed: true,
-    });
-    const reviewId = await deps.store.createReview({
-      repo: payload.repo,
-      prId: payload.prId,
-      commitSha: payload.commitSha,
-      status: "queued",
-      mode: repoConfig.mode,
-    });
-    await deps.queue.enqueue({ ...payload, reviewId });
-
-    return { received: true };
+    return handleReviewRequest(deps, platform, request.body);
   });
 
   app.post<{ Params: { platform: string } }>("/webhooks/outcomes/:platform", async (request, reply) => {
-    const rawBody = request.rawBody ?? "";
-    const header = request.headers["x-hub-signature-256"] ?? request.headers["x-hub-signature"];
-    const signature = Array.isArray(header) ? header[0] : header;
-    if (!verifySignature(deps.config.WEBHOOK_SECRET, rawBody, signature)) {
+    if (!isValidSignature(deps, request)) {
       return reply.status(401).send({ error: "Invalid signature" });
     }
 
@@ -78,9 +56,10 @@ export const webhookPlugin: FastifyPluginAsync<WebhookDeps> = async (app, deps) 
     if (await deps.store.hasEvent(eventKey)) {
       return { received: true, deduped: true };
     }
+    // Apply before claiming the key: applyOutcome is idempotent, so a
+    // redelivery after a failure re-runs safely instead of losing the event.
+    const result = await handleOutcomeEvent({ findFinding: deps.findFinding, queue: deps.outcomeQueue }, event);
     await deps.store.recordEvent({ platform, eventKey, validated: true, processed: true });
-
-    const result = await handleOutcomeEvent({ db: deps.db, queue: deps.outcomeQueue }, event);
     return { received: true, handled: result.handled };
   });
 };

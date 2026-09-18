@@ -21,13 +21,15 @@ export const outcomeEventSchema = z.object({
 export type OutcomeEvent = z.infer<typeof outcomeEventSchema>;
 
 export interface OutcomeWebhookDeps {
-  db: Db;
+  // Resolution of a platform comment id back to a finding. Injected so the
+  // webhook path never needs a full ORM handle — only this one read.
+  findFinding: (platform: "github" | "bitbucket", commentId: string) => Promise<string | null>;
   queue: OutcomeQueue;
 }
 
 export async function handleOutcomeEvent(deps: OutcomeWebhookDeps, event: OutcomeEvent & { platform: "github" | "bitbucket" }): Promise<{ handled: boolean }> {
   // A reply's own id is not in posted_comments; resolve via the parent when present.
-  const findingId = (await findFindingByCommentId(deps.db, event.platform, event.commentId)) ?? (event.inReplyTo !== undefined ? await findFindingByCommentId(deps.db, event.platform, event.inReplyTo) : null);
+  const findingId = (await deps.findFinding(event.platform, event.commentId)) ?? (event.inReplyTo !== undefined ? await deps.findFinding(event.platform, event.inReplyTo) : null);
   if (!findingId) {
     // Not one of our comments (another bot or a human's own comment).
     return { handled: false };
@@ -60,7 +62,7 @@ function classifyOutcomeEvent(event: OutcomeEvent): ClassifiedOutcome {
   return { to: "replied" };
 }
 
-async function findFindingByCommentId(db: Db, platform: string, commentId: string): Promise<string | null> {
+export async function findFindingByCommentId(db: Db, platform: "github" | "bitbucket", commentId: string): Promise<string | null> {
   const rows = await db
     .select({ findingId: postedComments.findingId })
     .from(postedComments)
