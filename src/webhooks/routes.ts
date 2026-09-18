@@ -21,6 +21,7 @@ function isValidSignature(deps: WebhookDeps, request: { rawBody?: string } & { h
 export const webhookPlugin: FastifyPluginAsync<WebhookDeps> = async (app, deps) => {
   app.post<{ Params: { platform: string } }>("/webhooks/:platform", async (request, reply) => {
     if (!isValidSignature(deps, request)) {
+      request.log.warn({ platform: request.params.platform }, "webhook rejected: invalid signature");
       return reply.status(401).send({ error: "Invalid signature" });
     }
 
@@ -34,6 +35,7 @@ export const webhookPlugin: FastifyPluginAsync<WebhookDeps> = async (app, deps) 
 
     // Normalized sender (bridge/CI) without GitHub's event header.
     if (!isWebhookPayload(request.body)) {
+      request.log.warn({ platform, event: eventName }, "webhook rejected: invalid normalized payload");
       return reply.status(400).send({ error: "Invalid webhook payload" });
     }
     return handleReviewRequest(deps, platform, request.body);
@@ -41,12 +43,14 @@ export const webhookPlugin: FastifyPluginAsync<WebhookDeps> = async (app, deps) 
 
   app.post<{ Params: { platform: string } }>("/webhooks/outcomes/:platform", async (request, reply) => {
     if (!isValidSignature(deps, request)) {
+      request.log.warn({ platform: request.params.platform }, "outcome webhook rejected: invalid signature");
       return reply.status(401).send({ error: "Invalid signature" });
     }
 
     const platform = parsePlatform(request.params.platform);
     const parsed = outcomeEventSchema.safeParse(request.body);
     if (!parsed.success) {
+      request.log.warn({ platform }, "outcome webhook rejected: invalid outcome event");
       return reply.status(400).send({ error: "Invalid outcome event" });
     }
     const event = { ...parsed.data, platform };
