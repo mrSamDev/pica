@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { buildApp } from "../src/app.ts";
 import { loadConfig } from "../src/config.ts";
@@ -31,20 +31,26 @@ function makeApp() {
 }
 
 describe("landing page", () => {
+  let app: ReturnType<typeof makeApp>;
+
+  beforeEach(() => {
+    app = makeApp();
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
   it("serves html at /landing-page", async () => {
-    const app = makeApp();
     const res = await app.inject({ method: "GET", url: "/landing-page" });
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/html");
     expect(res.body).toContain("self-learning code review agent");
     expect(res.body).toContain('href="/dashboard"');
-    await app.close();
   });
 
   it("needs no auth", async () => {
-    const app = makeApp();
     const res = await app.inject({ method: "GET", url: "/landing-page" });
     expect(res.statusCode).toBe(200);
-    await app.close();
   });
 });
