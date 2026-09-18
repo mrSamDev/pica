@@ -101,16 +101,19 @@ cat "$REVIEW_OUT"
 
 if [[ "$REVIEW_EXIT" -eq 143 ]]; then
   echo "review-gate: pi review timed out after ${REVIEW_TIMEOUT}s. Not blocking, but review was skipped."
+elif [[ "$REVIEW_EXIT" -eq 127 ]]; then
+  echo "review-gate: WAIT — pi not found or unreachable (exit 127). Self-review silently did nothing."
+  echo "           $(command -v pi || echo 'pi is MISSING'); install it or bypass deliberately with REVIEW_SKIP=1."
 elif [[ "$REVIEW_EXIT" -ne 0 ]]; then
-  echo "review-gate: pi review failed (exit $REVIEW_EXIT). Not blocking on review failure, but inspect output above."
+  echo "review-gate: pi review failed (exit $REVIEW_EXIT). Not blocking, but inspect output above."
 fi
 
 # --- 3. Parse the main review verdict -----------------------------------------
 # Verdict is the last line that is a JSON object.
 REVIEW_BLOCK=false
-VERDICT="$(grep -E '^\{"block"' "$REVIEW_OUT" | tail -1 || true)"
+VERDICT="$(grep -oE '"block"[[:space:]]*:[[:space:]]*"?(true|false)"?[[:space:]]*' "$REVIEW_OUT" | tail -1 || true)"
 if [[ -n "$VERDICT" ]]; then
-  REVIEW_BLOCK="$(echo "$VERDICT" | grep -oE '"block"[[:space:]]*:[[:space:]]*(true|false)' | grep -oE '(true|false)$' | head -1)"
+  REVIEW_BLOCK="$(echo "$VERDICT" | grep -oE '(true|false)$' | tail -1)"
 fi
 
 # --- 4. If the main review blocked, skip the comment review -------------------
@@ -128,7 +131,7 @@ else
     | grep -E '^\+' \
     | grep -vE '^\+\+\+' \
     | sed 's/^\+//' \
-    | grep -E '(//|/\*|\*|#|<!--|--|;)' \
+    | grep -E '^[[:space:]]*(//|/\*|\*|<!--|#)' \
     > "$COMMENTS_FILE" || true
 
   if [[ -s "$COMMENTS_FILE" ]]; then
@@ -151,9 +154,9 @@ else
     elif [[ "$COMMENT_EXIT" -ne 0 ]]; then
       echo "review-gate: comment review failed (exit $COMMENT_EXIT). Not blocking."
     else
-      COMMENT_VERDICT="$(grep -E '^\{"block"' "$COMMENT_OUT" | tail -1 || true)"
+      COMMENT_VERDICT="$(grep -oE '"block"[[:space:]]*:[[:space:]]*"?(true|false)"?[[:space:]]*' "$COMMENT_OUT" | tail -1 || true)"
       if [[ -n "$COMMENT_VERDICT" ]]; then
-        COMMENT_BLOCK="$(echo "$COMMENT_VERDICT" | grep -oE '"block"[[:space:]]*:[[:space:]]*(true|false)' | grep -oE '(true|false)$' | head -1)"
+        COMMENT_BLOCK="$(echo "$COMMENT_VERDICT" | grep -oE '(true|false)$' | tail -1)"
       fi
     fi
   else
