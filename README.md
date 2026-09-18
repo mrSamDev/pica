@@ -36,6 +36,7 @@ no Fastify types) → view.
 | `src/db/`            | Drizzle schema + client + boot-time migrations                                                                                                                              |
 | `src/types/`         | Ambient type declarations (e.g. raw body on FastifyRequest)                                                                                                                 |
 | `src/dashboard/`     | Operational visibility: read-model projection, static UI + JSON API                                                                                                         |
+| `src/landing/`       | Public landing page (static HTML, no auth)                                                                                                                                  |
 | `src/observability/` | pino logger, prometheus metrics, Basic-auth gate                                                                                                                            |
 | `src/eval/`          | Offline replay harness (precision/recall per prompt × rules version)                                                                                                        |
 | `src/cli/`           | `review-agent` CLI: explain-rule, rules, report, rebuild read model                                                                                                         |

@@ -7,6 +7,7 @@ import type { Config } from "./config.ts";
 import { dashboardPlugin } from "./dashboard/routes.ts";
 import type { DashboardQueries } from "./dashboard/projection.ts";
 import type { Db } from "./db/client.ts";
+import { landingPlugin } from "./landing/routes.ts";
 import type { LLMClient } from "./llm/client.ts";
 import type { Metrics } from "./observability/metrics.ts";
 import { metricsPlugin } from "./observability/routes.ts";
@@ -116,6 +117,7 @@ export function buildApp(config: Readonly<Config>, logger: Logger, deps: AppDeps
     });
   });
 
+  app.register(landingPlugin);
   app.register(dashboardPlugin, { queries: deps.dashboardQueries, auth: deps.auth });
   app.register(metricsPlugin, { metrics: deps.metrics, getLearningLag: deps.getLearningLag, getDismissalRate: deps.getDismissalRate, auth: deps.auth });
   app.register(webhookPlugin, {
