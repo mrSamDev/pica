@@ -61,8 +61,8 @@ export const dashboardHtml = `<!doctype html>
           row('Active rules', state.learning.activeRules) +
           row('Candidate rules', state.learning.candidateRules) +
           row('Retired rules', state.learning.retiredRules) +
-          (state.learning.learningLagMs !== null
-            ? row('Learning lag (s)', Math.round(state.learning.learningLagMs))
+          (state.learning.learningLagSeconds !== null
+            ? row('Learning lag (s)', state.learning.learningLagSeconds)
             : '<p class="empty">Learning lag: no rule has activated yet.</p>') +
           trendRow(state.learning.dismissalRateTrend);
         var probes = document.getElementById('probes');

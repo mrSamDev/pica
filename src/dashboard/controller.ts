@@ -25,7 +25,7 @@ export interface DashboardState {
     activeRules: number;
     candidateRules: number;
     retiredRules: number;
-    learningLagMs: number | null;
+    learningLagSeconds: number | null;
     dismissalRateTrend: number[];
     probes: ProbeItem[];
   };
@@ -83,9 +83,11 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
       activeRules: rules.active,
       candidateRules: rules.candidate,
       retiredRules: rules.retired,
-      // getLearningLagSeconds returns a float; the response schema pins this
-      // as integer|null, so an unrounded value throws in the serializer.
-      learningLagMs: learningLagSeconds === null ? null : Math.round(learningLagSeconds),
+      // getLearningLagSeconds returns fractional seconds; the response schema
+      // pins this as integer|null, so an unrounded float throws in the
+      // serializer. The dashboard labels the row in seconds, so the field is
+      // seconds — rounded, not converted.
+      learningLagSeconds: learningLagSeconds === null ? null : Math.round(learningLagSeconds),
       dismissalRateTrend,
       probes,
     },
