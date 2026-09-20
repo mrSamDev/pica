@@ -50,7 +50,7 @@ export async function getWhyState(queries: DashboardQueries, findingId: string):
 }
 
 export async function getDashboardState(queries: DashboardQueries): Promise<DashboardState> {
-  const [system, findings, outcomes, activity, queueDepth, failedJobs, rules, learningLagMs, dismissalRateTrend, probes, failedReviews] = await Promise.all([
+  const [system, findings, outcomes, activity, queueDepth, failedJobs, rules, learningLagSeconds, dismissalRateTrend, probes, failedReviews] = await Promise.all([
     queries.countReviewsByStatus(),
     queries.countFindingsByStatus(),
     queries.countOutcomesByStatus(),
@@ -83,7 +83,9 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
       activeRules: rules.active,
       candidateRules: rules.candidate,
       retiredRules: rules.retired,
-      learningLagMs,
+      // getLearningLagSeconds returns a float; the response schema pins this
+      // as integer|null, so an unrounded value throws in the serializer.
+      learningLagMs: learningLagSeconds === null ? null : Math.round(learningLagSeconds),
       dismissalRateTrend,
       probes,
     },
