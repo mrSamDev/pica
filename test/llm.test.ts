@@ -58,4 +58,50 @@ describe("openrouter llm", () => {
     });
     await expect(llm.review("prompt")).rejects.toThrow(/content/);
   });
+
+  it("retries a 429 and succeeds on the next attempt", async () => {
+    let calls = 0;
+    const llm = createOpenRouterLLM({
+      apiKey: "key",
+      model: "model",
+      timeoutMs: 5000,
+      fetchImpl: async () => {
+        calls++;
+        if (calls === 1) return new Response("rate limited", { status: 429, headers: { "retry-after": "0" } });
+        return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
+      },
+    });
+    expect(await llm.review("prompt")).toBe("ok");
+    expect(calls).toBe(2);
+  });
+
+  it("fails fast on a terminal 404 without retrying", async () => {
+    let calls = 0;
+    const llm = createOpenRouterLLM({
+      apiKey: "key",
+      model: "model",
+      timeoutMs: 5000,
+      fetchImpl: async () => {
+        calls++;
+        return new Response("model unavailable for free", { status: 404 });
+      },
+    });
+    await expect(llm.review("prompt")).rejects.toThrow(/404/);
+    expect(calls).toBe(1);
+  });
+
+  it("gives up after max retries on a persistent 429", async () => {
+    let calls = 0;
+    const llm = createOpenRouterLLM({
+      apiKey: "key",
+      model: "model",
+      timeoutMs: 5000,
+      fetchImpl: async () => {
+        calls++;
+        return new Response("rate limited", { status: 429, headers: { "retry-after": "0" } });
+      },
+    });
+    await expect(llm.review("prompt")).rejects.toThrow(/429/);
+    expect(calls).toBe(3);
+  });
 });
