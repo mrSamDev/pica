@@ -15,6 +15,21 @@ export interface OpenRouterDeps {
 
 const DEFAULT_BASE_URL = "https://openrouter.ai/api/v1";
 
+// Free-tier models get upstream rate limits (429) and brief provider blips
+// (5xx). Retry those inline instead of failing the review to the DLQ — a
+// terminal model error (404) must still fail fast.
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+const MAX_ATTEMPTS = 3;
+const MAX_RETRY_DELAY_MS = 10_000;
+
+function retryDelayMs(status: number, retryAfterHeader: string | null, attempt: number): number {
+  // OpenRouter sends Retry-After (seconds) on 429s; cap it so a long value
+  // can't hold a worker hostage.
+  const retryAfter = Number(retryAfterHeader ?? "0");
+  if (retryAfter > 0) return Math.min(retryAfter * 1000, MAX_RETRY_DELAY_MS);
+  return Math.min(1000 * attempt, MAX_RETRY_DELAY_MS);
+}
+
 // The review output we consume lives in content regardless of reasoning.
 const openRouterMessageSchema = z.object({
   content: z.string(),
@@ -41,7 +56,7 @@ export function createOpenRouterLLM(deps: OpenRouterDeps): LLMClient {
       if (deps.reasoning) {
         body.reasoning = { enabled: true };
       }
-      const response = await fetchImpl(`${baseUrl}/chat/completions`, {
+      const options: RequestInit = {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -50,11 +65,16 @@ export function createOpenRouterLLM(deps: OpenRouterDeps): LLMClient {
         body: JSON.stringify(body),
         // A hung provider must not hold a review worker forever.
         signal: AbortSignal.timeout(deps.timeoutMs),
-      });
+      };
+
+      let response = await fetchImpl(`${baseUrl}/chat/completions`, options);
+      for (let attempt = 2; attempt <= MAX_ATTEMPTS; attempt++) {
+        if (response.ok || !RETRYABLE_STATUSES.has(response.status)) break;
+        await new Promise((resolve) => setTimeout(resolve, retryDelayMs(response.status, response.headers.get("retry-after"), attempt - 1)));
+        response = await fetchImpl(`${baseUrl}/chat/completions`, options);
+      }
 
       if (!response.ok) {
-        // The status alone hides the provider's reason: a bare 404 masked
-        // "this model is unavailable for free" until the body was inspected.
         const detail = await response.text().catch(() => "");
         throw new Error(`LLM request failed: ${response.status}: ${detail.slice(0, 200)}`);
       }

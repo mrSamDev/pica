@@ -13,7 +13,10 @@ export function createReviewQueue(queue: Queue): ReviewQueue {
       // re-adds the same id and BullMQ returns the existing job instead of
       // enqueueing a second pipeline run for the same PR commit.
       const jobId = `review@${request.repo}@${request.prId}@${request.commitSha}`;
-      await queue.add("review", request, { jobId });
+      // The pipeline is idempotent (finding dedup + existing-comment check),
+      // so a retried job can't double-post — but a transient LLM outage must
+      // not land a review straight in the DLQ.
+      await queue.add("review", request, { jobId, attempts: 3, backoff: { type: "exponential", delay: 30_000 } });
     },
   };
 }
