@@ -67,11 +67,23 @@ export function createOpenRouterLLM(deps: OpenRouterDeps): LLMClient {
         signal: AbortSignal.timeout(deps.timeoutMs),
       };
 
-      let response = await fetchImpl(`${baseUrl}/chat/completions`, options);
+      const postOnce = async (): Promise<Response> => fetchImpl(`${baseUrl}/chat/completions`, options);
+      // Parses a fresh response body once. null = non-ok response; a
+      // safeParse failure on an ok body means the model returned no usable
+      // content (free-tier content filter, empty reasoning turn) — transient.
+      const parseOnce = async (res: Response) => {
+        if (!res.ok) return null;
+        return openRouterResponseSchema.safeParse(await res.json());
+      };
+
+      let response = await postOnce();
+      let parsed = await parseOnce(response);
       for (let attempt = 2; attempt <= MAX_ATTEMPTS; attempt++) {
-        if (response.ok || !RETRYABLE_STATUSES.has(response.status)) break;
+        const retryable = response.ok ? !parsed?.success : RETRYABLE_STATUSES.has(response.status);
+        if (!retryable) break;
         await new Promise((resolve) => setTimeout(resolve, retryDelayMs(response.status, response.headers.get("retry-after"), attempt - 1)));
-        response = await fetchImpl(`${baseUrl}/chat/completions`, options);
+        response = await postOnce();
+        parsed = await parseOnce(response);
       }
 
       if (!response.ok) {
@@ -79,8 +91,7 @@ export function createOpenRouterLLM(deps: OpenRouterDeps): LLMClient {
         throw new Error(`LLM request failed: ${response.status}: ${detail.slice(0, 200)}`);
       }
 
-      const parsed = openRouterResponseSchema.safeParse(await response.json());
-      if (!parsed.success) {
+      if (!parsed || !parsed.success) {
         throw new Error("LLM response missing content");
       }
       return parsed.data.choices[0]?.message.content ?? "";

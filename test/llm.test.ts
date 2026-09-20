@@ -104,4 +104,22 @@ describe("openrouter llm", () => {
     await expect(llm.review("prompt")).rejects.toThrow(/429/);
     expect(calls).toBe(3);
   });
+
+  it("retries when an ok response carries no content", async () => {
+    let calls = 0;
+    const llm = createOpenRouterLLM({
+      apiKey: "key",
+      model: "model",
+      timeoutMs: 5000,
+      fetchImpl: async () => {
+        calls++;
+        if (calls === 1) {
+          return new Response(JSON.stringify({ choices: [{ message: { content: null } }] }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
+      },
+    });
+    expect(await llm.review("prompt")).toBe("ok");
+    expect(calls).toBe(2);
+  });
 });
