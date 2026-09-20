@@ -86,7 +86,21 @@ describe("dashboard", () => {
     });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
-    expect(res.json().learning).toMatchObject({ activeRules: 2, candidateRules: 1, retiredRules: 0, learningLagMs: 3600 });
+    expect(res.json().learning).toMatchObject({ activeRules: 2, candidateRules: 1, retiredRules: 0, learningLagSeconds: 3600 });
+    await app.close();
+  });
+
+  it("rounds a fractional learning lag to match the integer response schema", async () => {
+    // getLearningLagSeconds returns (activatedAt - dismissedAt) / 1000, a
+    // float. The response schema pins learningLagSeconds as integer|null; an
+    // unrounded float makes fast-json-stringify throw (production 500s).
+    // The dashboard labels the row in seconds, so the field carries seconds —
+    // rounded, not converted.
+    const queries = createFakeDashboardQueries({ learningLag: async () => 3600.516 });
+    const app = makeApp(queries);
+    const res = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().learning.learningLagSeconds).toBe(3601);
     await app.close();
   });
 

@@ -37,7 +37,7 @@ export const dashboardSchema = {
             activeRules: { type: "integer" },
             candidateRules: { type: "integer" },
             retiredRules: { type: "integer" },
-            learningLagMs: { type: ["integer", "null"] },
+            learningLagSeconds: { type: ["integer", "null"] },
             dismissalRateTrend: { type: "array", items: { type: "number" } },
             probes: {
               type: "array",
