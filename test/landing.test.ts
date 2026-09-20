@@ -19,6 +19,7 @@ function makeApp() {
   return buildApp(config, logger, {
     db: createUnusedDb(),
     queue: createUnusedQueue(),
+    outcomeQueue: createUnusedQueue(),
     platform: createFakePlatform(),
     llm: createFakeLlm(),
     dashboardQueries: createFakeDashboardQueries(),
@@ -46,11 +47,24 @@ describe("landing page", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["content-type"]).toContain("text/html");
     expect(res.body).toContain("self-learning code review agent");
-    expect(res.body).toContain('href="/dashboard"');
+    expect(res.body).toContain("Why this experiment");
+    expect(res.body).toContain("Core principles");
+  });
+
+  it("exposes no links to the auth-gated dashboard or why pages", async () => {
+    const res = await app.inject({ method: "GET", url: "/landing-page" });
+    expect(res.body).not.toContain('href="/dashboard"');
+    expect(res.body).not.toContain('href="/why"');
   });
 
   it("needs no auth", async () => {
     const res = await app.inject({ method: "GET", url: "/landing-page" });
     expect(res.statusCode).toBe(200);
+  });
+
+  it("redirects / to /landing-page", async () => {
+    const res = await app.inject({ method: "GET", url: "/" });
+    expect(res.statusCode).toBe(302);
+    expect(res.headers.location).toBe("/landing-page");
   });
 });
