@@ -68,12 +68,18 @@ export function createOpenRouterLLM(deps: OpenRouterDeps): LLMClient {
       };
 
       const postOnce = async (): Promise<Response> => fetchImpl(`${baseUrl}/chat/completions`, options);
-      // Parses a fresh response body once. null = non-ok response; a
-      // safeParse failure on an ok body means the model returned no usable
+      // Parses a fresh response body once. null = non-ok or unreadable body;
+      // a safeParse failure on an ok body means the model returned no usable
       // content (free-tier content filter, empty reasoning turn) — transient.
       const parseOnce = async (res: Response) => {
         if (!res.ok) return null;
-        return openRouterResponseSchema.safeParse(await res.json());
+        try {
+          return openRouterResponseSchema.safeParse(await res.json());
+        } catch {
+          // Malformed JSON on an ok body (proxy error page, truncated stream)
+          // is the same transient class as a schema failure.
+          return null;
+        }
       };
 
       let response = await postOnce();
