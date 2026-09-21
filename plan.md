@@ -873,3 +873,27 @@ list, files to create, and definition of done.
 - No no-op stubs, no dead abstractions, no `console.log` in src.
 - One process, one job, one clear learning loop.
 - **Every behavior is covered by a test written before the code.**
+
+---
+
+## 15. Positioning decision (post external review)
+
+External review found the system work ahead of the product: strong engineering,
+weak story. Decisions, in priority order:
+
+- **GitHub-first, observe-first.** Positioning and onboarding lead with GitHub
+  webhook reviews and "install, review, respond normally". The Bitbucket
+  adapter stays (tested, working) but is de-emphasized in all product copy;
+  removal is a separate decision after the loop shows real-world proof.
+- **Dashboard leads with judgment, not telemetry.** `/dashboard` now opens with
+  a verdict panel (`improving | uncertain | attention`) computed from the data
+  the panels already showed: dismissal-rate trend, outcome counts, failure
+  state. Thin evidence renders as `uncertain` — never a claim from a small
+  sample (floor: ~10 decisive outcomes, ≥3 trend points).
+- **Landing leads with the story.** One walkthrough (finding → dismissed 3× →
+  candidate rule → suppression → why it was safe), clearly labeled
+  illustrative. Philosophy sits below the fold.
+- **UI framework: Vue 3, no build step.** `vue.esm-browser.prod.js` vendored at
+  `src/dashboard/vendor/` (ships via the existing `COPY src` Dockerfile line;
+  excluded from comment-hygiene, security-audit, oxlint, oxfmt — vendored
+  upstream code, not hand-written).
