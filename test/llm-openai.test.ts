@@ -1,21 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { createOpenAILLM } from "../src/llm/openai.ts";
-
-interface CapturedCall {
-  url: string;
-  init: RequestInit;
-}
-
-function captureFetch(responder: (call: CapturedCall) => Response) {
-  const calls: CapturedCall[] = [];
-  const fetchImpl: typeof fetch = (input, init) => {
-    const call = { url: String(input), init: init ?? {} };
-    calls.push(call);
-    return Promise.resolve(responder(call));
-  };
-  return { fetchImpl, calls };
-}
+import { captureFetch } from "./helpers/llm.ts";
 
 function okBody(): string {
   return JSON.stringify({ choices: [{ message: { content: "ok" } }] });

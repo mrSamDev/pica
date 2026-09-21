@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { and, eq, ne } from "drizzle-orm";
 
 import type { Db } from "../../db/client.ts";
+import type { LLMProvider } from "../../llm/factory.ts";
 import { findings, llmCalls, patterns, postedComments, reviews } from "../../db/schema.ts";
 import { embed } from "../../learning/retrieval/embed.ts";
 import type { Finding, PriorFinding } from "../types.ts";
@@ -98,7 +99,7 @@ export async function fetchPostedCommentId(db: Db, platform: string, findingId: 
 export interface LlmCallRecord {
   reviewId: string;
   model: string;
-  provider: string;
+  provider: LLMProvider;
   promptHash: string;
   status: string;
 }

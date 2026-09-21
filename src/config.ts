@@ -59,9 +59,10 @@ const configSchema = z
     GITHUB_INSTALLATION_ID: z.string().optional().transform(unsetIfBlank),
     PLATFORM: z.enum(["github", "bitbucket"]).default("github"),
     LLM_MODEL: z.string().default("deepseek/deepseek-v4-flash-0731:free"),
-    // Ask the provider for chain-of-thought. Some reasoning models return the
-    // answer under `reasoning` and leave `content` empty, which fails the strict
-    // content schema — turn this off for non-reasoning or free-tier models.
+    // OpenRouter-only chain-of-thought param; other providers ignore it. Some
+    // reasoning models return the answer under `reasoning` and leave `content`
+    // empty, which fails the strict content schema — turn this off for
+    // non-reasoning or free-tier models.
     LLM_REASONING: z
       .enum(["true", "false"])
       .default("true")

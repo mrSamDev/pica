@@ -61,4 +61,11 @@ describe("llm factory", () => {
     expect(bodies[0]).toContain('"reasoning":{"enabled":true}');
     expect(bodies[1]).not.toContain("reasoning");
   });
+
+  it("fails fast without a key for keyed providers and runs ollama keyless", () => {
+    for (const provider of ["openrouter", "openai", "anthropic"] as const) {
+      expect(() => createLLMClient({ provider, model: "m", timeoutMs: 5000 })).toThrow(/LLM_API_KEY/);
+    }
+    expect(() => createLLMClient({ provider: "ollama", model: "m", timeoutMs: 5000 })).not.toThrow();
+  });
 });

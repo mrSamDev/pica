@@ -2,7 +2,8 @@
 // free tiers / proxies answer 429s and brief 5xx blips; retry those inline
 // instead of failing the review to the DLQ. A terminal model error (404)
 // must still fail fast.
-export const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
+// Terminal model errors (404, 401) must fail fast, not retry.
+const RETRYABLE_STATUSES = new Set([408, 429, 500, 502, 503, 504]);
 
 const MAX_ATTEMPTS = 3;
 const MAX_RETRY_DELAY_MS = 10_000;
