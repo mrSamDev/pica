@@ -29,6 +29,10 @@ export const dashboardHtml = `<!doctype html>
       .verdict .reasons { margin: 0 0 0.5rem; padding-left: 1.2rem; font-size: 0.9rem; }
       .verdict .next { font-size: 0.85rem; margin: 0; color: #b8c2cc; }
       .verdict .next .k { color: #8b98a5; margin-right: 0.4rem; }
+      .explain { font-size: 0.78rem; color: #6d7a86; margin: 0 0 0.6rem; line-height: 1.45; }
+      .insight { font-size: 0.82rem; color: #b8c2cc; margin: 0.5rem 0 0; }
+      .spark { display: block; width: 100%; height: 34px; margin-top: 0.6rem; }
+      .spark polyline { fill: none; stroke: #7fb3ff; stroke-width: 2; }
     </style>
   </head>
   <body>

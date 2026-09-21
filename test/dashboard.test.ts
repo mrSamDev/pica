@@ -146,6 +146,19 @@ describe("dashboard", () => {
     await app.close();
   });
 
+  it("dashboard panels explain themselves and derive insight lines", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    // Explainer copy is asserted once here, not per panel.
+    expect(res.body).toContain("needs a human");
+    expect(res.body).toContain("training signal");
+    expect(res.body).toContain("audit trail");
+    // Derived insight lines + trend direction language.
+    expect(res.body).toContain("auto-suppressed by learned rules");
+    expect(res.body).toContain("the loop is learning");
+    await app.close();
+  });
+
   it("shows rules with evidence counts (Phase 3 learned rules view)", async () => {
     const queries = createFakeDashboardQueries({
       listRules: async () => [{ id: "r1", repo: "owner/repo", ruleType: "ignore", status: "active", pattern: "security:jwt", confidence: 0.9, evidenceCount: 3, positiveCount: 0, negativeCount: 3, createdAt: new Date() }],
