@@ -1,5 +1,24 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
 import type { DashboardQueries, FailedReview, ProbeItem, RuleSummary, WhyDisappeared } from "./projection.ts";
 import { dashboardHtml, whyHtml } from "./view.ts";
+
+// Built by `pnpm build:dashboard` (vite, see vite.config.ts) into dist/app.js.
+// Read once at boot so a stale or missing bundle fails fast, not on first view.
+function readDashboardBundle(): string {
+  try {
+    return readFileSync(join(import.meta.dirname, "dist/app.js"), "utf8");
+  } catch {
+    throw new Error("dashboard bundle missing — run `pnpm build:dashboard` before starting the server");
+  }
+}
+
+const appBundle = readDashboardBundle();
+
+export function getDashboardApp(): string {
+  return appBundle;
+}
 
 export interface DashboardState {
   system: {
@@ -64,7 +83,7 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
     queries.failedReviews(10),
   ]);
 
-  return {
+  const state: DashboardState = {
     system: {
       reviewsRunning: system.running,
       reviewsCompleted: system.completed,
@@ -90,4 +109,5 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
     failedReviews,
     recentActivity: activity,
   };
+  return state;
 }

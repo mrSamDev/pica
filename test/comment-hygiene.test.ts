@@ -77,7 +77,9 @@ function srcComments(files: string[]): Comment[] {
 }
 
 describe("comment hygiene (Phase 6)", () => {
-  const files = listFiles(SRC);
+  // Generated dashboard bundle (dist/app.js, vite build) is compiled upstream
+  // code, not hand-written comments under review.
+  const files = listFiles(SRC).filter((f) => !f.slice(SRC.length + 1).startsWith(join("dashboard", "dist")));
 
   it("no comment line is duplicated (normalized) across different files", () => {
     const byText = new Map<string, Comment[]>();

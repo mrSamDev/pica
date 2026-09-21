@@ -69,13 +69,30 @@ describe("dashboard", () => {
     await app.close();
   });
 
-  it("serves the dashboard HTML with the poll + rules renderers intact", async () => {
+  it("serves the dashboard shell with the built Vue bundle mounted", async () => {
     const app = makeApp(createFakeDashboardQueries());
     const res = await app.inject({ method: "GET", url: "/dashboard" });
     expect(res.statusCode).toBe(200);
-    expect(res.body).toContain("function poll()");
-    expect(res.body).toContain("function renderRules");
-    expect(res.body).toContain("function render(state)");
+    expect(res.body).toContain('id="app"');
+    expect(res.body).toContain('src="/dashboard/app.js"');
+    const script = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    expect(script.statusCode).toBe(200);
+    expect(script.headers["content-type"]).toContain("text/javascript");
+    // Minified vite bundle: string literals survive, identifiers do not.
+    expect(script.body).toContain("Verdict");
+    expect(script.body).toContain("Dismissal rate / review");
+    await app.close();
+  });
+
+  it("dashboard view: raw metrics and probes, no marketing copy (control-room aesthetic)", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("Learning lag");
+    expect(res.body).toContain("Dismissal rate / review");
+    expect(res.body).toContain("ε-probes");
+    // §8 character: raw numbers/statuses, not SaaS metrics-are-simple copy.
+    expect(res.body).not.toMatch(/health score|intelligence|AI magic/i);
     await app.close();
   });
 
@@ -103,15 +120,11 @@ describe("dashboard", () => {
     await app.close();
   });
 
-  it("dashboard view: raw metrics and probes, no marketing copy (control-room aesthetic)", async () => {
-    const app = makeApp(createFakeDashboardQueries({ dismissalRateTrend: async () => [0.5, 0.42, 0.3], probes: async () => [] }));
-    const res = await app.inject({ method: "GET", url: "/dashboard" });
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toContain("Learning lag");
-    expect(res.body).toContain("Dismissal rate / review");
-    expect(res.body).toContain("ε-probes");
-    // §8 character: raw numbers/statuses, not SaaS metrics-are-simple copy.
-    expect(res.body).not.toMatch(/health score|intelligence|AI magic/i);
+  it("dashboard bundle renders the verdict lead panel", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    expect(res.body).toContain("verdict");
+    expect(res.body).toContain("headline");
     await app.close();
   });
 

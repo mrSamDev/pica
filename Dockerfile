@@ -1,7 +1,25 @@
 # App image only. Postgres/Redis come from docker-compose (or any external
 # URLs via DATABASE_URL/REDIS_URL env). Migrations are applied at app boot by
 # src/db/migrations.ts, so the drizzle SQL is copied into the image.
-# Node 24 native type stripping — no build step, no ts-node.
+# Node 24 native type stripping — no ts-node; the dashboard client is built
+# with vite in a first stage (src/dashboard/app.jsx → dist/app.js).
+
+# Stage 1: build the dashboard client bundle (needs devDeps for vite).
+FROM node:24-alpine AS dashboard-build
+
+ENV PNPM_HOME="/pnpm"
+ENV PATH="$PNPM_HOME:$PATH"
+RUN corepack enable
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml vite.config.ts ./
+RUN pnpm install --frozen-lockfile
+
+COPY src ./src
+RUN pnpm build:dashboard
+
+# Stage 2: runtime image with production deps only.
 FROM node:24-alpine
 
 ENV PNPM_HOME="/pnpm"
@@ -10,13 +28,14 @@ RUN corepack enable
 
 WORKDIR /app
 
-# Install production deps only (no build step, so devDeps are unnecessary at runtime)
+# Install production deps only (no build step at runtime, so devDeps are unnecessary)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 
 # App source, plus migrations applied at boot.
 COPY src ./src
 COPY drizzle ./drizzle
+COPY --from=dashboard-build /app/src/dashboard/dist/app.js ./src/dashboard/dist/app.js
 
 # Run as non-root
 USER node

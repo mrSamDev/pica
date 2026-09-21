@@ -2,7 +2,7 @@ import type { FastifyPluginAsync, FastifyTypeProviderDefault, RawServerDefault }
 import type { Logger } from "pino";
 
 import { basicAuthHook, type BasicAuthConfig } from "../observability/auth.ts";
-import { getDashboardHtml, getDashboardState, getRulesState, getWhyHtml, getWhyState } from "./controller.ts";
+import { getDashboardApp, getDashboardHtml, getDashboardState, getRulesState, getWhyHtml, getWhyState } from "./controller.ts";
 import type { DashboardQueries } from "./projection.ts";
 import { dashboardSchema, rulesSchema, whySchema } from "./schema.ts";
 
@@ -16,6 +16,10 @@ export const dashboardPlugin: FastifyPluginAsync<DashboardDeps, RawServerDefault
 
   app.get("/dashboard", async (_request, reply) => {
     return reply.type("text/html").send(getDashboardHtml());
+  });
+
+  app.get("/dashboard/app.js", async (_request, reply) => {
+    return reply.type("text/javascript").send(getDashboardApp());
   });
 
   app.get("/api/dashboard", { schema: dashboardSchema }, async () => {
