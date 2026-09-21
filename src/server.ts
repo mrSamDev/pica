@@ -7,7 +7,7 @@ import { createDashboardQueries } from "./dashboard/projection.ts";
 import { createDb } from "./db/client.ts";
 import { runMigrations } from "./db/migrations.ts";
 import { runLearner } from "./learning/learner/learner.ts";
-import { createOpenRouterLLM } from "./llm/openrouter.ts";
+import { createLLMClient } from "./llm/factory.ts";
 import { createLogger } from "./observability/logger.ts";
 import { createMetrics } from "./observability/metrics.ts";
 import { getLearningLagSeconds } from "./learning/lag.ts";
@@ -45,7 +45,7 @@ const platform =
   config.PLATFORM === "github"
     ? createGitHubClient({ tokenProvider: platformTokenProvider, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES, timeoutMs: config.PLATFORM_TIMEOUT_MS })
     : createBitbucketClient({ tokenProvider: platformTokenProvider, allowedHosts, maxDiffBytes: config.MAX_DIFF_BYTES, timeoutMs: config.PLATFORM_TIMEOUT_MS });
-const llm = createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS, reasoning: config.LLM_REASONING });
+const llm = createLLMClient({ provider: config.LLM_PROVIDER, apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS, baseUrl: config.LLM_BASE_URL, reasoning: config.LLM_REASONING });
 const reviewDeps = { db, platform, llm, config, metrics };
 const worker = createReviewWorker(redis, reviewDeps, logger);
 // BullMQ emits `failed` per job and `error` for internal problems; without

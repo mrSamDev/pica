@@ -32,7 +32,7 @@ no Fastify types) → view.
 | `src/learning/`      | The learning loop: immutable events, taxonomy, patterns, signals, learner (Beta confidence + decay + ε-probing), retrieval read model, feedback reply-parser, rules, report |
 | `src/queue/`         | BullMQ workers (review, feedback/outcome) + Redis connection; retries and DLQ                                                                                               |
 | `src/platform/`      | GitHub / Bitbucket adapters, SSRF-pinned `safeFetch`, feedback poller                                                                                                       |
-| `src/llm/`           | Small `LLMClient` + OpenRouter implementation                                                                                                                               |
+| `src/llm/`           | Small `LLMClient` + provider clients: openrouter (default), ollama, openai-compatible, anthropic (`LLM_PROVIDER`)                                                           |
 | `src/db/`            | Drizzle schema + client + boot-time migrations                                                                                                                              |
 | `src/types/`         | Ambient type declarations (e.g. raw body on FastifyRequest)                                                                                                                 |
 | `src/dashboard/`     | Operational visibility: read-model projection, static UI + JSON API                                                                                                         |
@@ -53,7 +53,8 @@ pnpm dev             # --watch, loads .env if present
 ```
 
 Required env vars (no defaults — fail fast on boot): `DATABASE_URL`,
-`REDIS_URL`, `WEBHOOK_SECRET`, `LLM_API_KEY`. Platform auth needs exactly one
+`REDIS_URL`, `WEBHOOK_SECRET`, `LLM_API_KEY` (except when `LLM_PROVIDER=ollama`).
+Platform auth needs exactly one
 path: `PLATFORM_TOKEN` (a fine-grained PAT), or a GitHub App via
 `GITHUB_APP_ID` + `GITHUB_INSTALLATION_ID` + `GITHUB_APP_PRIVATE_KEY`. Set
 `DASHBOARD_USERNAME` / `DASHBOARD_PASSWORD` for the dashboard + `/metrics`.

@@ -4,7 +4,7 @@ import { parseArgs } from "./args.ts";
 import { runCommand, type CliDeps } from "./commands.ts";
 import { loadConfig } from "../config.ts";
 import { createDb } from "../db/client.ts";
-import { createOpenRouterLLM } from "../llm/openrouter.ts";
+import { createLLMClient } from "../llm/factory.ts";
 import { createMetrics } from "../observability/metrics.ts";
 import { createBitbucketClient } from "../platform/bitbucket.ts";
 import { createGitHubClient } from "../platform/github.ts";
@@ -26,7 +26,7 @@ async function main(): Promise<number> {
         config.PLATFORM === "bitbucket"
           ? createBitbucketClient({ tokenProvider: platformTokenProvider, allowedHosts: new Set(config.ALLOWED_HOSTS), maxDiffBytes: config.MAX_DIFF_BYTES })
           : createGitHubClient({ tokenProvider: platformTokenProvider, allowedHosts: new Set(config.ALLOWED_HOSTS), maxDiffBytes: config.MAX_DIFF_BYTES }),
-      llm: createOpenRouterLLM({ apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS, reasoning: config.LLM_REASONING }),
+      llm: createLLMClient({ provider: config.LLM_PROVIDER, apiKey: config.LLM_API_KEY, model: config.LLM_MODEL, timeoutMs: config.LLM_TIMEOUT_MS, baseUrl: config.LLM_BASE_URL, reasoning: config.LLM_REASONING }),
       config,
       metrics: createMetrics(),
       now: () => new Date(),
