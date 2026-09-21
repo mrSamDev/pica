@@ -3,6 +3,7 @@ import { join } from "node:path";
 
 import type { DashboardQueries, FailedReview, ProbeItem, RuleSummary, WhyDisappeared } from "./projection.ts";
 import { dashboardHtml, whyHtml } from "./view.ts";
+import { computeDashboardVerdict, type Verdict } from "./verdict.ts";
 
 // Built by `pnpm build:dashboard` (vite, see vite.config.ts) into dist/app.js.
 // Read once at boot so a stale or missing bundle fails fast, not on first view.
@@ -50,6 +51,7 @@ export interface DashboardState {
   };
   failedReviews: FailedReview[];
   recentActivity: unknown[];
+  verdict: Verdict;
 }
 
 export function getDashboardHtml(): string {
@@ -83,7 +85,7 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
     queries.failedReviews(10),
   ]);
 
-  const state: DashboardState = {
+  const state: Omit<DashboardState, "verdict"> = {
     system: {
       reviewsRunning: system.running,
       reviewsCompleted: system.completed,
@@ -109,5 +111,5 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
     failedReviews,
     recentActivity: activity,
   };
-  return state;
+  return { ...state, verdict: computeDashboardVerdict(state) };
 }

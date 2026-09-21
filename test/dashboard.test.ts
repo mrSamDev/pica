@@ -96,6 +96,24 @@ describe("dashboard", () => {
     await app.close();
   });
 
+  it("verdict leads the dashboard: uncertain until evidence exists, attention when reviews fail", async () => {
+    const uncertain = makeApp(createFakeDashboardQueries());
+    const res = await uncertain.inject({ method: "GET", url: "/api/dashboard" });
+    expect(res.json().verdict.status).toBe("uncertain");
+    await uncertain.close();
+
+    const attention = makeApp(
+      createFakeDashboardQueries({
+        failedReviews: async () => [{ jobId: "j1", repo: "o/r", prId: "7", error: "boom", completedAt: null }],
+        dismissalRateTrend: async () => [0.6, 0.5, 0.4, 0.3],
+      }),
+    );
+    const res2 = await attention.inject({ method: "GET", url: "/api/dashboard" });
+    // Attention outranks a falling trend: broken runs cannot hide behind learning prose.
+    expect(res2.json().verdict.status).toBe("attention");
+    await attention.close();
+  });
+
   it("shows the learning panel: rule counts + learning lag", async () => {
     const queries = createFakeDashboardQueries({
       countRulesByStatus: async () => ({ active: 2, candidate: 1, retired: 0 }),

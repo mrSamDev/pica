@@ -62,6 +62,16 @@ export const dashboardSchema = {
           },
         },
         recentActivity: { type: "array" },
+        verdict: {
+          type: "object",
+          properties: {
+            status: { type: "string", enum: ["improving", "uncertain", "attention"] },
+            headline: { type: "string" },
+            reasons: { type: "array", items: { type: "string" } },
+            nextActions: { type: "array", items: { type: "string" } },
+          },
+          required: ["status", "headline", "reasons", "nextActions"],
+        },
       },
     },
   },
