@@ -2,7 +2,7 @@
 # URLs via DATABASE_URL/REDIS_URL env). Migrations are applied at app boot by
 # src/db/migrations.ts, so the drizzle SQL is copied into the image.
 # Node 24 native type stripping — no ts-node; the dashboard client is built
-# with vite in a first stage (src/dashboard/app.jsx → dist/app.js).
+# with vite in a first stage.
 
 # Stage 1: build the dashboard client bundle (needs devDeps for vite).
 FROM node:24-alpine AS dashboard-build

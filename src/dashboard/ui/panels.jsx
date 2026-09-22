@@ -1,6 +1,6 @@
 import { defineComponent } from "vue";
 
-import { trendDirection } from "./verdict.ts";
+import { trendDirection } from "../verdict.ts";
 
 // One muted line under each panel header: what it measures and what "good"
 // looks like, so an operator never has to guess at a number.

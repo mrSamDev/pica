@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import type { DashboardQueries, FailedReview, ProbeItem, RuleSummary, WhyDisappeared } from "./projection.ts";
+import type { LlmStatus } from "./llm-status.ts";
 import { dashboardHtml, whyHtml } from "./view.ts";
 import { computeDashboardVerdict, type Verdict } from "./verdict.ts";
 
@@ -51,6 +52,7 @@ export interface DashboardState {
   };
   failedReviews: FailedReview[];
   recentActivity: unknown[];
+  llm: LlmStatus | null;
   verdict: Verdict;
 }
 
@@ -70,7 +72,7 @@ export async function getWhyState(queries: DashboardQueries, findingId: string):
   return queries.whyDisappeared(findingId);
 }
 
-export async function getDashboardState(queries: DashboardQueries): Promise<DashboardState> {
+export async function getDashboardState(queries: DashboardQueries, getLlmStatus: () => LlmStatus | null): Promise<DashboardState> {
   const [system, findings, outcomes, activity, queueDepth, failedJobs, rules, learningLagMs, dismissalRateTrend, probes, failedReviews] = await Promise.all([
     queries.countReviewsByStatus(),
     queries.countFindingsByStatus(),
@@ -110,6 +112,7 @@ export async function getDashboardState(queries: DashboardQueries): Promise<Dash
     },
     failedReviews,
     recentActivity: activity,
+    llm: getLlmStatus(),
   };
   return { ...state, verdict: computeDashboardVerdict(state) };
 }

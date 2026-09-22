@@ -1,3 +1,16 @@
+const llmStatusBody = {
+  type: ["object", "null"],
+  required: ["provider", "model", "reachable", "latencyMs", "checkedAt", "error"],
+  properties: {
+    provider: { type: "string" },
+    model: { type: "string" },
+    reachable: { type: "boolean" },
+    latencyMs: { type: ["integer", "null"] },
+    checkedAt: { type: "string" },
+    error: { type: ["string", "null"] },
+  },
+};
+
 export const dashboardSchema = {
   response: {
     200: {
@@ -62,6 +75,7 @@ export const dashboardSchema = {
           },
         },
         recentActivity: { type: "array" },
+        llm: llmStatusBody,
         verdict: {
           type: "object",
           properties: {
@@ -74,6 +88,12 @@ export const dashboardSchema = {
         },
       },
     },
+  },
+};
+
+export const llmStatusSchema = {
+  response: {
+    200: llmStatusBody,
   },
 };
 

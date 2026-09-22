@@ -118,7 +118,7 @@ export function buildApp(config: Readonly<Config>, logger: Logger, deps: AppDeps
   });
 
   app.register(landingPlugin);
-  app.register(dashboardPlugin, { queries: deps.dashboardQueries, auth: deps.auth });
+  app.register(dashboardPlugin, { queries: deps.dashboardQueries, auth: deps.auth, llm: deps.llm, llmProvider: config.LLM_PROVIDER, llmModel: config.LLM_MODEL });
   app.register(metricsPlugin, { metrics: deps.metrics, getLearningLag: deps.getLearningLag, getDismissalRate: deps.getDismissalRate, auth: deps.auth });
   app.register(webhookPlugin, {
     config,

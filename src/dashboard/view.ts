@@ -8,6 +8,7 @@ export const dashboardHtml = `<!doctype html>
       body { font-family: ui-monospace, monospace; background: #0b0e11; color: #d7dde3; margin: 0; padding: 2rem; }
       h1 { font-size: 1.25rem; color: #e8edf2; margin: 0 0 1rem; }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+      .status-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
       .panel { border: 1px solid #2a3138; border-radius: 6px; padding: 1rem; }
       .panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8b98a5; margin: 0 0 0.5rem; }
       .row { display: flex; justify-content: space-between; padding: 0.2rem 0; font-size: 0.9rem; }
@@ -33,6 +34,9 @@ export const dashboardHtml = `<!doctype html>
       .insight { font-size: 0.82rem; color: #b8c2cc; margin: 0.5rem 0 0; }
       .spark { display: block; width: 100%; height: 34px; margin-top: 0.6rem; }
       .spark polyline { fill: none; stroke: #7fb3ff; stroke-width: 2; }
+      button.action { font: inherit; margin-top: 0.75rem; background: #161b20; color: #d7dde3; border: 1px solid #2a3138; border-radius: 4px; padding: 0.4rem 0.8rem; cursor: pointer; }
+      button.action:hover:not(:disabled) { border-color: #7fb3ff; }
+      button.action:disabled { color: #5b6672; cursor: default; }
     </style>
   </head>
   <body>

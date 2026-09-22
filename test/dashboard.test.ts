@@ -16,13 +16,13 @@ const config = loadConfig({
 });
 const logger = createLogger(config);
 
-function makeApp(queries: DashboardQueries) {
+function makeApp(queries: DashboardQueries, llm = createFakeLlm()) {
   return buildApp(config, logger, {
     db: createUnusedDb(),
     queue: createUnusedQueue(),
     outcomeQueue: createUnusedQueue(),
     platform: createFakePlatform(),
-    llm: createFakeLlm(),
+    llm,
     dashboardQueries: queries,
     metrics: createFakeMetrics(),
     getLearningLag: async () => null,
@@ -91,6 +91,8 @@ describe("dashboard", () => {
     expect(res.body).toContain("Learning lag");
     expect(res.body).toContain("Dismissal rate / review");
     expect(res.body).toContain("ε-probes");
+    expect(res.body).toContain("LLM provider");
+    expect(res.body).toContain("/api/llm-status");
     // §8 character: raw numbers/statuses, not SaaS metrics-are-simple copy.
     expect(res.body).not.toMatch(/health score|intelligence|AI magic/i);
     await app.close();
@@ -208,6 +210,35 @@ describe("dashboard", () => {
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
     expect(res.json().recentActivity).toHaveLength(2);
     expect(res.json().recentActivity[0].eventType).toBe("review.completed");
+    await app.close();
+  });
+
+  it("starts with no LLM status, then reports a reachable provider after a check", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+
+    const before = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(before.json().llm).toBeNull();
+
+    const check = await app.inject({ method: "POST", url: "/api/llm-status" });
+    expect(check.statusCode).toBe(200);
+    expect(check.json()).toMatchObject({ provider: "openrouter", reachable: true });
+    expect(check.json().latencyMs).toBeGreaterThanOrEqual(0);
+
+    const after = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(after.json().llm).toMatchObject({ reachable: true, error: null });
+    await app.close();
+  });
+
+  it("reports an unreachable LLM with the failure reason", async () => {
+    const app = makeApp(createFakeDashboardQueries(), {
+      review: async () => {
+        throw new Error("connection refused");
+      },
+    });
+    const check = await app.inject({ method: "POST", url: "/api/llm-status" });
+    expect(check.statusCode).toBe(200);
+    expect(check.json()).toMatchObject({ reachable: false, latencyMs: null });
+    expect(check.json().error).toContain("connection refused");
     await app.close();
   });
 

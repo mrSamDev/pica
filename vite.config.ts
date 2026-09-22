@@ -9,7 +9,7 @@ export default defineConfig({
     outDir: "src/dashboard/dist",
     emptyOutDir: true,
     rollupOptions: {
-      input: "src/dashboard/app.jsx",
+      input: "src/dashboard/ui/app.jsx",
       output: { format: "es", entryFileNames: "app.js" },
     },
   },

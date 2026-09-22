@@ -2,16 +2,23 @@ import type { FastifyPluginAsync, FastifyTypeProviderDefault, RawServerDefault }
 import type { Logger } from "pino";
 
 import { basicAuthHook, type BasicAuthConfig } from "../observability/auth.ts";
+import type { LLMClient } from "../llm/client.ts";
 import { getDashboardApp, getDashboardHtml, getDashboardState, getRulesState, getWhyHtml, getWhyState } from "./controller.ts";
+import { createLlmStatusProbe } from "./llm-status.ts";
 import type { DashboardQueries } from "./projection.ts";
-import { dashboardSchema, rulesSchema, whySchema } from "./schema.ts";
+import { dashboardSchema, llmStatusSchema, rulesSchema, whySchema } from "./schema.ts";
 
 export interface DashboardDeps {
   queries: DashboardQueries;
   auth: BasicAuthConfig;
+  llm: LLMClient;
+  llmProvider: string;
+  llmModel: string;
 }
 
 export const dashboardPlugin: FastifyPluginAsync<DashboardDeps, RawServerDefault, FastifyTypeProviderDefault, Logger> = async (app, deps) => {
+  const llmStatus = createLlmStatusProbe(deps.llm, { provider: deps.llmProvider, model: deps.llmModel });
+
   app.addHook("onRequest", basicAuthHook(deps.auth));
 
   app.get("/dashboard", async (_request, reply) => {
@@ -23,7 +30,11 @@ export const dashboardPlugin: FastifyPluginAsync<DashboardDeps, RawServerDefault
   });
 
   app.get("/api/dashboard", { schema: dashboardSchema }, async () => {
-    return getDashboardState(deps.queries);
+    return getDashboardState(deps.queries, () => llmStatus.get());
+  });
+
+  app.post("/api/llm-status", { schema: llmStatusSchema }, async () => {
+    return llmStatus.check();
   });
 
   app.get("/api/rules", { schema: rulesSchema }, async () => {
