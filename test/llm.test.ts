@@ -122,4 +122,37 @@ describe("openrouter llm", () => {
     expect(await llm.review("prompt")).toBe("ok");
     expect(calls).toBe(2);
   });
+
+  it("retries when an ok response has a malformed body", async () => {
+    let calls = 0;
+    const llm = createOpenRouterLLM({
+      apiKey: "key",
+      model: "model",
+      timeoutMs: 5000,
+      fetchImpl: async () => {
+        calls++;
+        if (calls === 1) {
+          return new Response("<html>bad gateway</html>", { status: 200 });
+        }
+        return new Response(JSON.stringify({ choices: [{ message: { content: "ok" } }] }), { status: 200 });
+      },
+    });
+    expect(await llm.review("prompt")).toBe("ok");
+    expect(calls).toBe(2);
+  });
+
+  it("fails with missing content when every attempt returns a malformed body", async () => {
+    let calls = 0;
+    const llm = createOpenRouterLLM({
+      apiKey: "key",
+      model: "model",
+      timeoutMs: 5000,
+      fetchImpl: async () => {
+        calls++;
+        return new Response("<html>bad gateway</html>", { status: 200 });
+      },
+    });
+    await expect(llm.review("prompt")).rejects.toThrow(/missing content/);
+    expect(calls).toBe(3);
+  });
 });

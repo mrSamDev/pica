@@ -59,7 +59,26 @@ describe("config", () => {
     const config = loadConfig(validEnv());
     expect(config.LLM_MODEL).toBe("deepseek/deepseek-v4-flash-0731:free");
     expect(config.LLM_REASONING).toBe(true);
+    expect(config.LLM_PROVIDER).toBe("openrouter");
+    expect(config.LLM_BASE_URL).toBeUndefined();
     expect(() => loadConfig({ ...validEnv(), LLM_REASONING: "false" })).not.toThrow();
+  });
+
+  it("requires LLM_API_KEY for non-ollama providers", () => {
+    expect(() => loadConfig({ ...validEnv(), LLM_API_KEY: undefined, LLM_PROVIDER: "openai" })).toThrow(/LLM_API_KEY/);
+    expect(() => loadConfig({ ...validEnv(), LLM_API_KEY: undefined, LLM_PROVIDER: "anthropic" })).toThrow(/LLM_API_KEY/);
+    expect(() => loadConfig({ ...validEnv(), LLM_API_KEY: undefined, LLM_PROVIDER: "openrouter" })).toThrow(/LLM_API_KEY/);
+  });
+
+  it("runs ollama keyless and accepts a provider endpoint override", () => {
+    const config = loadConfig({ ...validEnv(), LLM_API_KEY: undefined, LLM_PROVIDER: "ollama", LLM_BASE_URL: "http://gpu-box:11434" });
+    expect(config.LLM_PROVIDER).toBe("ollama");
+    expect(config.LLM_BASE_URL).toBe("http://gpu-box:11434");
+  });
+
+  it("rejects an invalid LLM_PROVIDER and LLM_BASE_URL", () => {
+    expect(() => loadConfig({ ...validEnv(), LLM_PROVIDER: "gemini" })).toThrow(/LLM_PROVIDER/);
+    expect(() => loadConfig({ ...validEnv(), LLM_BASE_URL: "not-a-url" })).toThrow(/LLM_BASE_URL/);
   });
 
   it("rejects invalid REPO_CONFIG JSON", () => {

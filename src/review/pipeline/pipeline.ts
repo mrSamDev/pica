@@ -55,7 +55,7 @@ export async function runReview(deps: ReviewDeps, request: ReviewRequest): Promi
       await recordLlmCall(deps.db, {
         reviewId: request.reviewId,
         model: deps.config.LLM_MODEL,
-        provider: "openrouter",
+        provider: deps.config.LLM_PROVIDER,
         promptHash: createHash("sha256").update(prompt).digest("hex"),
         status: "ok",
       });

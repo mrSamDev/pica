@@ -42,7 +42,12 @@ const configSchema = z
     DATABASE_URL: z.url(),
     REDIS_URL: z.url(),
     WEBHOOK_SECRET: z.string().min(1),
-    LLM_API_KEY: z.string().min(1),
+    LLM_PROVIDER: z.enum(["openrouter", "ollama", "openai", "anthropic"]).default("openrouter"),
+    // Required for openrouter/openai/anthropic; unused for ollama (superRefine below).
+    LLM_API_KEY: z.string().min(1).optional().transform(unsetIfBlank),
+    // Optional endpoint override; each provider client has its own default
+    // (openrouter.ai/api/v1, api.openai.com/v1, localhost:11434, api.anthropic.com/v1).
+    LLM_BASE_URL: z.url().optional().transform(unsetIfBlank),
     PLATFORM_TOKEN: z.string().optional().transform(unsetIfBlank),
     // GitHub App server-to-server auth (GitHub only): App ID + private key + an
     // installation ID. Replaces PLATFORM_TOKEN when set; install tokens expire
@@ -54,9 +59,10 @@ const configSchema = z
     GITHUB_INSTALLATION_ID: z.string().optional().transform(unsetIfBlank),
     PLATFORM: z.enum(["github", "bitbucket"]).default("github"),
     LLM_MODEL: z.string().default("deepseek/deepseek-v4-flash-0731:free"),
-    // Ask the provider for chain-of-thought. Some reasoning models return the
-    // answer under `reasoning` and leave `content` empty, which fails the strict
-    // content schema — turn this off for non-reasoning or free-tier models.
+    // OpenRouter-only chain-of-thought param; other providers ignore it. Some
+    // reasoning models return the answer under `reasoning` and leave `content`
+    // empty, which fails the strict content schema — turn this off for
+    // non-reasoning or free-tier models.
     LLM_REASONING: z
       .enum(["true", "false"])
       .default("true")
@@ -74,7 +80,7 @@ const configSchema = z
     // Comma-separated host allowlist for outbound fetches (SSRF guard).
     ALLOWED_HOSTS: z
       .string()
-      .default("api.github.com,github.com,api.bitbucket.org,bitbucket.org,openrouter.ai")
+      .default("api.github.com,github.com,api.bitbucket.org,bitbucket.org,openrouter.ai,api.openai.com,api.anthropic.com,localhost")
       .transform((value) =>
         value
           .split(",")
@@ -158,6 +164,13 @@ const configSchema = z
         code: "custom",
         path: ["GITHUB_APP_ID"],
         message: "GITHUB_APP_ID, GITHUB_APP_PRIVATE_KEY, and GITHUB_INSTALLATION_ID must be set together",
+      });
+    }
+    if (data.LLM_PROVIDER !== "ollama" && !data.LLM_API_KEY) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["LLM_API_KEY"],
+        message: `LLM_API_KEY is required for provider "${data.LLM_PROVIDER}" (only ollama runs keyless)`,
       });
     }
     if (appCredsComplete && data.PLATFORM === "bitbucket") {

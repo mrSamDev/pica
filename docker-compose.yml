@@ -15,7 +15,11 @@ services:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@postgres:5432/pica
       REDIS_URL: redis://redis:6379
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET}
-      LLM_API_KEY: ${LLM_API_KEY:?set LLM_API_KEY}
+      LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
+      # Key is validated at boot: required for openrouter/openai/anthropic,
+      # unused for ollama.
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_BASE_URL: ${LLM_BASE_URL:-}
       # Auth: either PLATFORM_TOKEN (PAT) or all three GitHub App vars below.
       # Optional-interpolated; config validation at boot guards that exactly one
       # complete auth path is configured.
