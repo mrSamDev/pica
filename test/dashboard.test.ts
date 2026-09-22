@@ -106,7 +106,8 @@ describe("dashboard", () => {
 
     const attention = makeApp(
       createFakeDashboardQueries({
-        failedReviews: async () => [{ jobId: "j1", repo: "o/r", prId: "7", error: "boom", completedAt: null }],
+        countReviewsByStatus: async () => ({ running: 0, completed: 0, failed: 1 }),
+        failedReviews: async () => [{ requestId: "req-1", jobId: "j1", repo: "o/r", prId: "7", error: "boom", completedAt: null }],
         dismissalRateTrend: async () => [0.6, 0.5, 0.4, 0.3],
       }),
     );
@@ -123,7 +124,22 @@ describe("dashboard", () => {
     });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
-    expect(res.json().learning).toMatchObject({ activeRules: 2, candidateRules: 1, retiredRules: 0, learningLagMs: 3600 });
+    expect(res.json().learning).toMatchObject({ activeRules: 2, candidateRules: 1, retiredRules: 0, learningLagSeconds: 3600 });
+
+    // The panel must read the field the API actually sends; a stale name
+    // renders NaN and no API-only test would catch it.
+    const script = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    expect(script.body).toContain("learningLagSeconds");
+    expect(script.body).not.toContain("learningLagMs");
+    await app.close();
+  });
+
+  it("rounds a fractional learning lag to match the integer response schema", async () => {
+    const queries = createFakeDashboardQueries({ learningLag: async () => 3600.516 });
+    const app = makeApp(queries);
+    const res = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().learning.learningLagSeconds).toBe(3601);
     await app.close();
   });
 
@@ -196,6 +212,51 @@ describe("dashboard", () => {
     const missing = await app.inject({ method: "GET", url: "/api/why?findingId=nope" });
     expect(missing.statusCode).toBe(200);
     expect(missing.json()).toBeNull();
+    await app.close();
+  });
+
+  it("shows failed reviews with the request id for log correlation", async () => {
+    const queries = createFakeDashboardQueries({
+      failedReviews: async () => [{ requestId: "req-uuid", jobId: "review@o/r@7@sha", repo: "o/r", prId: "7", error: "boom", completedAt: "2026-09-01T00:00:00.000Z" }],
+    });
+    const app = makeApp(queries);
+    const res = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().failedReviews[0]).toMatchObject({ requestId: "req-uuid", error: "boom" });
+    await app.close();
+  });
+
+  it("serves the dedicated failed-reviews page with its own API", async () => {
+    const queries = createFakeDashboardQueries({
+      countReviewsByStatus: async () => ({ running: 0, completed: 1, failed: 3 }),
+      failedReviews: async () => [{ requestId: "req-1", jobId: "j1", repo: "o/r", prId: "7", error: "boom", completedAt: "2026-09-01T00:00:00.000Z" }],
+    });
+    const app = makeApp(queries);
+
+    const page = await app.inject({ method: "GET", url: "/errors" });
+    expect(page.statusCode).toBe(200);
+    expect(page.headers["content-type"]).toContain("text/html");
+    expect(page.body).toContain("Failed reviews");
+
+    // Same bundle as the dashboard, mounted by pathname.
+    const script = await app.inject({ method: "GET", url: "/errors/app.js" });
+    expect(script.statusCode).toBe(200);
+    expect(script.headers["content-type"]).toContain("text/javascript");
+
+    const api = await app.inject({ method: "GET", url: "/api/errors" });
+    expect(api.statusCode).toBe(200);
+    expect(api.json()).toMatchObject({ total: 3 });
+    expect(api.json().failures[0].requestId).toBe("req-1");
+    await app.close();
+  });
+
+  it("links the dashboard failures panel to the dedicated errors page", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    // Minified JSX renders the link as href:"/errors" — assert the target, not
+    // the HTML attribute shape.
+    expect(res.body).toContain("/errors");
+    expect(res.body).toContain("view all");
     await app.close();
   });
 
@@ -306,6 +367,15 @@ describe("dashboard auth", () => {
     const app = makeAuthedApp();
     const res = await app.inject({ method: "GET", url: "/metrics" });
     expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("gates the failed-reviews page and API", async () => {
+    const app = makeAuthedApp();
+    for (const url of ["/errors", "/errors/app.js", "/api/errors"]) {
+      const res = await app.inject({ method: "GET", url });
+      expect(res.statusCode).toBe(401);
+    }
     await app.close();
   });
 });

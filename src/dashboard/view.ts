@@ -1,10 +1,6 @@
-export const dashboardHtml = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pica — control room</title>
-    <style>
+// Control-room CSS is shared by the dashboard and the failed-reviews page so
+// the two operator views stay visually identical without a second stylesheet.
+const controlRoomCss = `
       body { font-family: ui-monospace, monospace; background: #0b0e11; color: #d7dde3; margin: 0; padding: 2rem; }
       h1 { font-size: 1.25rem; color: #e8edf2; margin: 0 0 1rem; }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
@@ -19,6 +15,10 @@ export const dashboardHtml = `<!doctype html>
       ul.activity { list-style: none; margin: 0; padding: 0; }
       ul.activity li { padding: 0.3rem 0; border-bottom: 1px solid #1c2228; font-size: 0.85rem; }
       .err { color: #ff8b7d; font-size: 0.8rem; padding: 0.15rem 0; word-break: break-word; }
+      .failures { margin-top: 1rem; }
+      .failure-head { display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; }
+      .failure-head .req { color: #e8edf2; }
+      .view-all { font-size: 0.72rem; letter-spacing: 0; text-transform: none; margin-left: 0.5rem; }
       .tag { color: #7fb3ff; }
       .muted { color: #5b6672; }
       a { color: #7fb3ff; }
@@ -37,12 +37,35 @@ export const dashboardHtml = `<!doctype html>
       button.action { font: inherit; margin-top: 0.75rem; background: #161b20; color: #d7dde3; border: 1px solid #2a3138; border-radius: 4px; padding: 0.4rem 0.8rem; cursor: pointer; }
       button.action:hover:not(:disabled) { border-color: #7fb3ff; }
       button.action:disabled { color: #5b6672; cursor: default; }
-    </style>
+`;
+
+export const dashboardHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pica — control room</title>
+    <style>${controlRoomCss}    </style>
   </head>
   <body>
     <h1>Pica — control room</h1>
     <div id="app"></div>
     <script type="module" src="/dashboard/app.js"></script>
+  </body>
+</html>`;
+
+export const errorsHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pica — failed reviews</title>
+    <style>${controlRoomCss}    </style>
+  </head>
+  <body>
+    <h1><a href="/dashboard">Pica</a> · Failed reviews</h1>
+    <div id="app"></div>
+    <script type="module" src="/errors/app.js"></script>
   </body>
 </html>`;
 

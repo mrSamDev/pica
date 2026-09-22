@@ -114,10 +114,13 @@ pnpm cli rebuild-read-model      # rebuild rules from the immutable event log
 
 ## Dashboard & metrics
 
-The same Fastify app serves a minimal control room (`/dashboard`) and Prometheus
-metrics (`/metrics`) — raw numbers, not marketing. Panels: system health, review
-behavior, learning (rules + `learning_lag` + dismissal-rate trend), recent
-activity from the event log. Basic-auth gated in production.
+The same Fastify app serves a minimal control room (`/dashboard`), a dedicated
+failed-reviews page (`/errors`), and Prometheus metrics (`/metrics`) — raw
+numbers, not marketing. Panels: system health, review behavior, learning
+(active/candidate/retired rules, `learning_lag`, dismissal-rate trend), most
+recent failed reviews (oldest first, each with its request id), and recent
+activity from the event log. `/dashboard`, `/errors`, and `/metrics` are
+Basic-auth gated in production.
 
 ## Deployment
 

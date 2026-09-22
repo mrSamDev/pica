@@ -35,5 +35,5 @@ export function createLLMClient(deps: LLMFactoryDeps): LLMClient {
   if (deps.provider === "anthropic") {
     return createAnthropicLLM({ apiKey, model: deps.model, timeoutMs: deps.timeoutMs, baseUrl: deps.baseUrl, fetchImpl: deps.fetchImpl });
   }
-  return createOllamaLLM({ model: deps.model, timeoutMs: deps.timeoutMs, baseUrl: deps.baseUrl, fetchImpl: deps.fetchImpl });
+  return createOllamaLLM({ model: deps.model, timeoutMs: deps.timeoutMs, baseUrl: deps.baseUrl, apiKey: deps.apiKey, fetchImpl: deps.fetchImpl });
 }

@@ -1,3 +1,20 @@
+// One failure row, shared by the dashboard's failed-reviews panel and the
+// /errors page. A factory, not a shared const: Fastify compiles each route's
+// schema independently, so every route gets its own object graph.
+function failedReviewSchema() {
+  return {
+    type: "object",
+    properties: {
+      requestId: { type: "string" },
+      jobId: { type: "string" },
+      repo: { type: "string" },
+      prId: { type: "string" },
+      error: { type: "string" },
+      completedAt: { type: ["string", "null"] },
+    },
+  };
+}
+
 const llmStatusBody = {
   type: ["object", "null"],
   required: ["provider", "model", "reachable", "latencyMs", "checkedAt", "error"],
@@ -50,7 +67,7 @@ export const dashboardSchema = {
             activeRules: { type: "integer" },
             candidateRules: { type: "integer" },
             retiredRules: { type: "integer" },
-            learningLagMs: { type: ["integer", "null"] },
+            learningLagSeconds: { type: ["integer", "null"] },
             dismissalRateTrend: { type: "array", items: { type: "number" } },
             probes: {
               type: "array",
@@ -63,16 +80,7 @@ export const dashboardSchema = {
         },
         failedReviews: {
           type: "array",
-          items: {
-            type: "object",
-            properties: {
-              jobId: { type: "string" },
-              repo: { type: "string" },
-              prId: { type: "string" },
-              error: { type: "string" },
-              completedAt: { type: ["string", "null"] },
-            },
-          },
+          items: failedReviewSchema(),
         },
         recentActivity: { type: "array" },
         llm: llmStatusBody,
@@ -94,6 +102,19 @@ export const dashboardSchema = {
 export const llmStatusSchema = {
   response: {
     200: llmStatusBody,
+  },
+};
+
+export const errorsSchema = {
+  response: {
+    200: {
+      type: "object",
+      required: ["total", "failures"],
+      properties: {
+        total: { type: "integer" },
+        failures: { type: "array", items: failedReviewSchema() },
+      },
+    },
   },
 };
 

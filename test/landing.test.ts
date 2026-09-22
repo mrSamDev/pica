@@ -51,8 +51,11 @@ describe("landing page", () => {
     expect(res.body).toContain("Core principles");
   });
 
-  it("exposes no links to the auth-gated dashboard or why pages", async () => {
+  it("advertises only the failed-reviews page, never the control room", async () => {
     const res = await app.inject({ method: "GET", url: "/landing-page" });
+    // /errors is the one operator page the landing advertises (owner decision);
+    // the control room and the why drill-down stay unadvertised.
+    expect(res.body).toContain('href="/errors"');
     expect(res.body).not.toContain('href="/dashboard"');
     expect(res.body).not.toContain('href="/why"');
   });

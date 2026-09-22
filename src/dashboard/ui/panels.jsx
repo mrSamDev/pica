@@ -1,5 +1,6 @@
 import { defineComponent } from "vue";
 
+import { FailureList } from "./failure-list.jsx";
 import { trendDirection } from "../verdict.ts";
 
 // One muted line under each panel header: what it measures and what "good"
@@ -207,7 +208,7 @@ export const LearningPanel = defineComponent({
           <StatRow k="Active rules" v={props.learning.activeRules} />
           <StatRow k="Candidate rules" v={props.learning.candidateRules} />
           <StatRow k="Retired rules" v={props.learning.retiredRules} />
-          {props.learning.learningLagMs !== null ? <StatRow k="Learning lag (s)" v={Math.round(props.learning.learningLagMs)} /> : <p class="empty">Learning lag: no rule has activated yet.</p>}
+          {props.learning.learningLagSeconds !== null ? <StatRow k="Learning lag (s)" v={Math.round(props.learning.learningLagSeconds)} /> : <p class="empty">Learning lag: no rule has activated yet.</p>}
           <TrendSection rates={props.learning.dismissalRateTrend} />
           <ProbesSection probes={props.learning.probes} />
           <RulesSection rules={props.rules} />
@@ -244,20 +245,15 @@ export const FailuresPanel = defineComponent({
   props: { failures: { type: Array, required: true } },
   setup(props) {
     return () => (
-      <div class="panel">
-        <h2>Failed reviews</h2>
-        <p class="explain">Reviews that errored, with the reason each one failed. Empty here means the pipeline is not silently dropping anything.</p>
-        {props.failures.length === 0 ? (
-          <p class="empty">No failed reviews.</p>
-        ) : (
-          props.failures.map((f) => (
-            <div class="rule" key={f.jobId}>
-              <code>{f.jobId}</code>
-              <span class="muted">{f.completedAt ? f.completedAt.slice(0, 19) : ""}</span>
-              <div class="err">{f.error}</div>
-            </div>
-          ))
-        )}
+      <div class="panel failures">
+        <h2>
+          Failed reviews{" "}
+          <a class="view-all" href="/errors">
+            view all →
+          </a>
+        </h2>
+        <p class="explain">The most recent reviews that errored, oldest first. The request id is the same id in the webhook, queue job, and logs. Empty here means the pipeline is not silently dropping anything.</p>
+        {props.failures.length === 0 ? <p class="empty">No failed reviews.</p> : <FailureList failures={props.failures} />}
       </div>
     );
   },

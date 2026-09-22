@@ -43,7 +43,8 @@ const configSchema = z
     REDIS_URL: z.url(),
     WEBHOOK_SECRET: z.string().min(1),
     LLM_PROVIDER: z.enum(["openrouter", "ollama", "openai", "anthropic"]).default("openrouter"),
-    // Required for openrouter/openai/anthropic; unused for ollama (superRefine below).
+    // Required for openrouter/openai/anthropic; optional for ollama (a local
+    // daemon runs keyless, ollama.com cloud models need the key).
     LLM_API_KEY: z.string().min(1).optional().transform(unsetIfBlank),
     // Optional endpoint override; each provider client has its own default
     // (openrouter.ai/api/v1, api.openai.com/v1, localhost:11434, api.anthropic.com/v1).

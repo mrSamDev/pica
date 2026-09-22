@@ -83,6 +83,9 @@ export const landingHtml = `<!doctype html>
           finding disappear?” for any finding id.
         </li>
       </ol>
+      <p class="story-note">
+        Operators watch failures on the <a href="/errors">failed reviews</a> page — every errored review, oldest first, with the request id that traces it through the logs.
+      </p>
     </section>
 
     <section>

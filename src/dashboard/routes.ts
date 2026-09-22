@@ -3,10 +3,10 @@ import type { Logger } from "pino";
 
 import { basicAuthHook, type BasicAuthConfig } from "../observability/auth.ts";
 import type { LLMClient } from "../llm/client.ts";
-import { getDashboardApp, getDashboardHtml, getDashboardState, getRulesState, getWhyHtml, getWhyState } from "./controller.ts";
+import { getDashboardApp, getDashboardHtml, getDashboardState, getErrorsHtml, getErrorsState, getRulesState, getWhyHtml, getWhyState } from "./controller.ts";
 import { createLlmStatusProbe } from "./llm-status.ts";
 import type { DashboardQueries } from "./projection.ts";
-import { dashboardSchema, llmStatusSchema, rulesSchema, whySchema } from "./schema.ts";
+import { dashboardSchema, errorsSchema, llmStatusSchema, rulesSchema, whySchema } from "./schema.ts";
 
 export interface DashboardDeps {
   queries: DashboardQueries;
@@ -27,6 +27,20 @@ export const dashboardPlugin: FastifyPluginAsync<DashboardDeps, RawServerDefault
 
   app.get("/dashboard/app.js", async (_request, reply) => {
     return reply.type("text/javascript").send(getDashboardApp());
+  });
+
+  app.get("/errors", async (_request, reply) => {
+    return reply.type("text/html").send(getErrorsHtml());
+  });
+
+  // Same bundle as /dashboard/app.js; the client picks the root component from
+  // location.pathname, so the two pages never drift apart.
+  app.get("/errors/app.js", async (_request, reply) => {
+    return reply.type("text/javascript").send(getDashboardApp());
+  });
+
+  app.get("/api/errors", { schema: errorsSchema }, async () => {
+    return getErrorsState(deps.queries);
   });
 
   app.get("/api/dashboard", { schema: dashboardSchema }, async () => {

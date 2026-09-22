@@ -54,6 +54,9 @@ export interface ProbeItem {
 }
 
 export interface FailedReview {
+  // reviews.id — the request id shared by the webhook, queue job payload, and
+  // every log line, so an operator can grep one failure end to end.
+  requestId: string;
   jobId: string;
   repo: string;
   prId: string;
@@ -141,10 +144,27 @@ export function createDashboardQueries(db: Db, queue: Queue, outcomeQueue: Queue
       return reviews + outcomes;
     },
     async failedReviews(limit) {
-      const rows = await db.select({ repo: reviews.repo, prId: reviews.prId, commitSha: reviews.commitSha, error: reviews.error, completedAt: reviews.completedAt }).from(reviews).where(eq(reviews.status, "failed")).orderBy(desc(reviews.completedAt)).limit(limit);
+      // Fetch the most recent failures, then present them oldest -> newest so
+      // the list reads as a timeline. Ordering ASC at the SQL level would let a
+      // long backlog fill the page with ancient failures and hide new ones.
+      // Postgres defaults DESC to NULLS FIRST, so undated rows are pushed out
+      // of the dated window explicitly; the sort below then keeps them last.
+      const rows = await db
+        .select({ id: reviews.id, repo: reviews.repo, prId: reviews.prId, commitSha: reviews.commitSha, error: reviews.error, completedAt: reviews.completedAt })
+        .from(reviews)
+        .where(eq(reviews.status, "failed"))
+        .orderBy(sql`${reviews.completedAt} desc nulls last`)
+        .limit(limit);
       // Mirror the BullMQ jobId format from enqueue.ts so the dashboard shows
       // the exact id a redis-cli re-drive needs.
+      rows.sort((a, b) => {
+        if (a.completedAt === null && b.completedAt === null) return 0;
+        if (a.completedAt === null) return 1;
+        if (b.completedAt === null) return -1;
+        return a.completedAt.getTime() - b.completedAt.getTime();
+      });
       return rows.map((r) => ({
+        requestId: r.id,
         jobId: `review@${r.repo}@${r.prId}@${r.commitSha}`,
         repo: r.repo,
         prId: r.prId,

@@ -1,23 +1,9 @@
 import { createApp, defineComponent, onMounted, onUnmounted, ref } from "vue";
 
+import { ErrorsApp } from "./errors-app.jsx";
 import { ActivityPanel, BehaviorPanel, FailuresPanel, LearningPanel, OutcomesPanel, SystemPanel, VerdictPanel } from "./panels.jsx";
 import { LlmPanel } from "./llm-panel.jsx";
-
-// Poll keeps the last good state on transient errors: the control room must
-// not blank out because one request hiccuped. In-flight guard: a slow poll
-// must not let the next interval fire overlap and land responses out of order.
-let inFlight = false;
-async function pollOnce(state, rules) {
-  if (inFlight) return;
-  inFlight = true;
-  try {
-    const [dashboard, ruleList] = await Promise.all([fetch("/api/dashboard"), fetch("/api/rules")]);
-    if (dashboard.ok) state.value = await dashboard.json();
-    if (ruleList.ok) rules.value = await ruleList.json();
-  } finally {
-    inFlight = false;
-  }
-}
+import { createPoller } from "./poller.js";
 
 const App = defineComponent({
   setup() {
@@ -25,7 +11,21 @@ const App = defineComponent({
     const rules = ref(null);
     let timer = null;
 
-    const refresh = () => pollOnce(state, rules).catch(() => {});
+    const poll = createPoller([
+      {
+        url: "/api/dashboard",
+        apply: (body) => {
+          state.value = body;
+        },
+      },
+      {
+        url: "/api/rules",
+        apply: (body) => {
+          rules.value = body;
+        },
+      },
+    ]);
+    const refresh = () => poll().catch(() => {});
 
     onMounted(() => {
       refresh();
@@ -34,8 +34,8 @@ const App = defineComponent({
     onUnmounted(() => clearInterval(timer));
 
     // Panel order follows the operator's questions: is it working (verdict),
-    // can it run (LLM + system), what happened (behavior/outcomes/learning),
-    // what broke (failures/activity).
+    // can it run (LLM + system), what broke (dedicated failures row), then
+    // what happened (behavior/outcomes/learning/activity).
     return () => {
       if (!state.value) return <p class="empty">Loading…</p>;
       const s = state.value;
@@ -45,11 +45,11 @@ const App = defineComponent({
           <LlmPanel status={s.llm} onCheck={refresh} />
           <SystemPanel system={s.system} />
         </div>,
+        <FailuresPanel failures={s.failedReviews} />,
         <div class="grid">
           <BehaviorPanel behavior={s.reviewBehavior} />
           <OutcomesPanel outcomes={s.outcomes} />
           <LearningPanel learning={s.learning} rules={rules.value ?? []} />
-          <FailuresPanel failures={s.failedReviews} />
           <ActivityPanel activity={s.recentActivity} />
         </div>,
       ];
@@ -57,4 +57,6 @@ const App = defineComponent({
   },
 });
 
-createApp(App).mount("#app");
+// One bundle serves both operator pages; the path decides which root mounts.
+const Root = location.pathname.startsWith("/errors") ? ErrorsApp : App;
+createApp(Root).mount("#app");

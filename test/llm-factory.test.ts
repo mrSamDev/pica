@@ -41,6 +41,23 @@ describe("llm factory", () => {
     expect(await client("anthropic", "http://an.internal/v1").review("p")).toMatch(/an\.internal/);
   });
 
+  it("forwards the api key to ollama (cloud models need bearer auth)", async () => {
+    const headers: RequestInit["headers"][] = [];
+    const llm = createLLMClient({
+      provider: "ollama",
+      apiKey: "ollama-key",
+      model: "glm-5.3-flash:cloud",
+      timeoutMs: 5000,
+      baseUrl: "https://ollama.com/v1",
+      fetchImpl: (input, init) => {
+        headers.push(init?.headers);
+        return Promise.resolve(respond(String(input)));
+      },
+    });
+    await llm.review("p");
+    expect(new Headers(headers[0]).get("authorization")).toBe("Bearer ollama-key");
+  });
+
   it("openrouter sends the reasoning flag, others never do", async () => {
     const bodies: string[] = [];
     const capture = (provider: "openrouter" | "openai") =>

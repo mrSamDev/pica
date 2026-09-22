@@ -127,7 +127,9 @@ export function computeDashboardVerdict(state: Omit<DashboardState, "verdict">):
     resolved: state.outcomes.resolved,
     dismissed: state.outcomes.dismissed,
     dismissalRateTrend: state.learning.dismissalRateTrend,
-    failedReviews: state.failedReviews.length,
+    // True failed count, not the capped failedReviews list length — past the
+    // display cap the verdict must still count every failure.
+    failedReviews: state.system.reviewsFailed,
     failedJobs: state.system.failedJobs,
     candidateRules: state.learning.candidateRules,
   });
