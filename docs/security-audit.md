@@ -1,6 +1,6 @@
 # Security audit (Phase 6)
 
-Scope §7 of `plan.md`. Every item lists the controlling implementation and the
+Scope: the hardening phase. Every item lists the controlling implementation and the
 test that enforces it. Completed when all boxes are checked and the referenced
 tests pass.
 
