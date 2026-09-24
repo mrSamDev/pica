@@ -67,7 +67,7 @@ path: `PLATFORM_TOKEN` (a fine-grained PAT), or a GitHub App via
 ## Run (Docker)
 
 ```bash
-cp .env.example .env   # fill in secrets; see docs/deployment.md
+cp .env.example .env   # fill in secrets
 docker compose up -d
 ```
 
@@ -97,8 +97,7 @@ convergence, falsifiability, and guardrail tests are first-class. Load tests
 enqueue a burst and verify no review job is lost; `safeFetch` is tested against
 oversized diff responses. A comment-hygiene gate
 (`test/comment-hygiene.test.ts`) scans `src/` for duplicated, decorative, or
-code-echo comments, the same way the `no console.log` guard is enforced. See
-`phases/` for the per-phase red → green lists.
+code-echo comments, the same way the `no console.log` guard is enforced.
 
 ## CLI
 
@@ -124,8 +123,8 @@ Basic-auth gated in production.
 
 ## Deployment
 
-VPS + docker-compose + Cloudflare Tunnel — no open ports. Full runbook:
-[docs/deployment.md](docs/deployment.md).
+VPS + docker-compose + Cloudflare Tunnel — no open ports. The stack lives in
+`docker-compose.yml`; secrets come from `.env`.
 
 ## Security
 
@@ -135,4 +134,4 @@ file and test references: [docs/security-audit.md](docs/security-audit.md).
 
 ## License
 
-Private project.
+[MIT](LICENSE).
