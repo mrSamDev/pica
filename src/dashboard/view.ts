@@ -19,6 +19,7 @@ const controlRoomCss = `
       .failure-head { display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; }
       .failure-head .req { color: #e8edf2; }
       .view-all { font-size: 0.72rem; letter-spacing: 0; text-transform: none; margin-left: 0.5rem; }
+      .nav { font-size: 0.78rem; margin-left: 0.75rem; }
       .tag { color: #7fb3ff; }
       .muted { color: #5b6672; }
       a { color: #7fb3ff; }
@@ -48,7 +49,7 @@ export const dashboardHtml = `<!doctype html>
     <style>${controlRoomCss}    </style>
   </head>
   <body>
-    <h1>Pica — control room</h1>
+    <h1>Pica — control room <a class="nav" href="/errors">failed reviews →</a></h1>
     <div id="app"></div>
     <script type="module" src="/dashboard/app.js"></script>
   </body>
