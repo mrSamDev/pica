@@ -16,8 +16,8 @@ services:
       REDIS_URL: redis://redis:6379
       WEBHOOK_SECRET: ${WEBHOOK_SECRET:?set WEBHOOK_SECRET}
       LLM_PROVIDER: ${LLM_PROVIDER:-openrouter}
-      # Key is validated at boot: required for openrouter/openai/anthropic,
-      # unused for ollama.
+      # Empty default, not ${VAR:?}: config validation rejects a keyless
+      # ollama.com endpoint at boot, while a local daemon needs no key.
       LLM_API_KEY: ${LLM_API_KEY:-}
       LLM_BASE_URL: ${LLM_BASE_URL:-}
       # Auth: either PLATFORM_TOKEN (PAT) or all three GitHub App vars below.

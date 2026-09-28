@@ -58,7 +58,8 @@ pnpm dev             # --watch, loads .env if present
 ```
 
 Required env vars (no defaults — fail fast on boot): `DATABASE_URL`,
-`REDIS_URL`, `WEBHOOK_SECRET`, `LLM_API_KEY` (except when `LLM_PROVIDER=ollama`).
+`REDIS_URL`, `WEBHOOK_SECRET`, `LLM_API_KEY`. Only a local `LLM_PROVIDER=ollama`
+daemon runs keyless; ollama.com cloud models need the key too.
 Platform auth needs exactly one
 path: `PLATFORM_TOKEN` (a fine-grained PAT), or a GitHub App via
 `GITHUB_APP_ID` + `GITHUB_INSTALLATION_ID` + `GITHUB_APP_PRIVATE_KEY`. Set
