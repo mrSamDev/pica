@@ -26,6 +26,20 @@ describe("ollama llm", () => {
     expect(calls[0]?.url).toBe("http://ollama.internal:11434/api/chat");
   });
 
+  it("strips an OpenAI-style /v1 suffix so cloud base urls reach /api/chat", async () => {
+    const { fetchImpl, calls } = captureFetch(() => new Response(okBody(), { status: 200 }));
+    const llm = createOllamaLLM({ model: "glm-5.3-flash:cloud", timeoutMs: 5000, baseUrl: "https://ollama.com/v1", fetchImpl });
+    expect(await llm.review("prompt")).toBe("ok");
+    expect(calls[0]?.url).toBe("https://ollama.com/api/chat");
+  });
+
+  it("sends the api key as a bearer token when one is configured", async () => {
+    const { fetchImpl, calls } = captureFetch(() => new Response(okBody(), { status: 200 }));
+    const llm = createOllamaLLM({ model: "glm-5.3-flash:cloud", timeoutMs: 5000, apiKey: "ollama-key", fetchImpl });
+    await llm.review("prompt");
+    expect(new Headers(calls[0]?.init.headers).get("authorization")).toBe("Bearer ollama-key");
+  });
+
   it("retries a transient 500 and succeeds on the next attempt", async () => {
     let attempts = 0;
     const llm = createOllamaLLM({

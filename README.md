@@ -20,6 +20,11 @@ findings; findings produce outcomes; outcomes produce learning signals; signals
 produce rules; rules change future reviews. Every stage is real or absent — no
 no-op stubs.
 
+pica is GitHub-first and observe-first: webhook PR reviews on GitHub, install,
+let it observe, respond to findings as you normally would. The Bitbucket
+adapter exists but is not the focus — breadth waits until the loop shows
+real-world proof.
+
 ## Architecture
 
 One process, one job. Layered per feature: routes → controller (pure functions,
@@ -108,10 +113,13 @@ pnpm cli rebuild-read-model      # rebuild rules from the immutable event log
 
 ## Dashboard & metrics
 
-The same Fastify app serves a minimal control room (`/dashboard`) and Prometheus
-metrics (`/metrics`) — raw numbers, not marketing. Panels: system health, review
-behavior, learning (rules + `learning_lag` + dismissal-rate trend), recent
-activity from the event log. Basic-auth gated in production.
+The same Fastify app serves a minimal control room (`/dashboard`), a dedicated
+failed-reviews page (`/errors`), and Prometheus metrics (`/metrics`) — raw
+numbers, not marketing. Panels: system health, review behavior, learning
+(active/candidate/retired rules, `learning_lag`, dismissal-rate trend), most
+recent failed reviews (oldest first, each with its request id), and recent
+activity from the event log. `/dashboard`, `/errors`, and `/metrics` are
+Basic-auth gated in production.
 
 ## Deployment
 

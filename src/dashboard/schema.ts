@@ -1,3 +1,33 @@
+// One failure row, shared by the dashboard's failed-reviews panel and the
+// /errors page. A factory, not a shared const: Fastify compiles each route's
+// schema independently, so every route gets its own object graph.
+function failedReviewSchema() {
+  return {
+    type: "object",
+    properties: {
+      requestId: { type: "string" },
+      jobId: { type: "string" },
+      repo: { type: "string" },
+      prId: { type: "string" },
+      error: { type: "string" },
+      completedAt: { type: ["string", "null"] },
+    },
+  };
+}
+
+const llmStatusBody = {
+  type: ["object", "null"],
+  required: ["provider", "model", "reachable", "latencyMs", "checkedAt", "error"],
+  properties: {
+    provider: { type: "string" },
+    model: { type: "string" },
+    reachable: { type: "boolean" },
+    latencyMs: { type: ["integer", "null"] },
+    checkedAt: { type: "string" },
+    error: { type: ["string", "null"] },
+  },
+};
+
 export const dashboardSchema = {
   response: {
     200: {
@@ -50,18 +80,39 @@ export const dashboardSchema = {
         },
         failedReviews: {
           type: "array",
-          items: {
-            type: "object",
-            properties: {
-              jobId: { type: "string" },
-              repo: { type: "string" },
-              prId: { type: "string" },
-              error: { type: "string" },
-              completedAt: { type: ["string", "null"] },
-            },
-          },
+          items: failedReviewSchema(),
         },
         recentActivity: { type: "array" },
+        llm: llmStatusBody,
+        verdict: {
+          type: "object",
+          properties: {
+            status: { type: "string", enum: ["improving", "uncertain", "attention"] },
+            headline: { type: "string" },
+            reasons: { type: "array", items: { type: "string" } },
+            nextActions: { type: "array", items: { type: "string" } },
+          },
+          required: ["status", "headline", "reasons", "nextActions"],
+        },
+      },
+    },
+  },
+};
+
+export const llmStatusSchema = {
+  response: {
+    200: llmStatusBody,
+  },
+};
+
+export const errorsSchema = {
+  response: {
+    200: {
+      type: "object",
+      required: ["total", "failures"],
+      properties: {
+        total: { type: "integer" },
+        failures: { type: "array", items: failedReviewSchema() },
       },
     },
   },

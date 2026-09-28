@@ -16,13 +16,13 @@ const config = loadConfig({
 });
 const logger = createLogger(config);
 
-function makeApp(queries: DashboardQueries) {
+function makeApp(queries: DashboardQueries, llm = createFakeLlm()) {
   return buildApp(config, logger, {
     db: createUnusedDb(),
     queue: createUnusedQueue(),
     outcomeQueue: createUnusedQueue(),
     platform: createFakePlatform(),
-    llm: createFakeLlm(),
+    llm,
     dashboardQueries: queries,
     metrics: createFakeMetrics(),
     getLearningLag: async () => null,
@@ -34,7 +34,13 @@ function makeApp(queries: DashboardQueries) {
 
 describe("dashboard", () => {
   it("shows live reviews", async () => {
-    const queries = createFakeDashboardQueries({ countReviewsByStatus: async () => ({ running: 1, completed: 0, failed: 0 }) });
+    const queries = createFakeDashboardQueries({
+      countReviewsByStatus: async () => ({
+        running: 1,
+        completed: 0,
+        failed: 0,
+      }),
+    });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
     expect(res.statusCode).toBe(200);
@@ -43,40 +49,131 @@ describe("dashboard", () => {
   });
 
   it("shows findings", async () => {
-    const queries = createFakeDashboardQueries({ countFindingsByStatus: async () => ({ posted: 2, suppressed: 1, duplicate: 0 }) });
+    const queries = createFakeDashboardQueries({
+      countFindingsByStatus: async () => ({
+        posted: 2,
+        suppressed: 1,
+        duplicate: 0,
+      }),
+    });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
-    expect(res.json().reviewBehavior).toMatchObject({ posted: 2, suppressed: 1, duplicate: 0 });
+    expect(res.json().reviewBehavior).toMatchObject({
+      posted: 2,
+      suppressed: 1,
+      duplicate: 0,
+    });
     await app.close();
   });
 
   it("shows outcomes", async () => {
-    const queries = createFakeDashboardQueries({ countOutcomesByStatus: async () => ({ posted: 3, replied: 2, resolved: 1, dismissed: 4 }) });
+    const queries = createFakeDashboardQueries({
+      countOutcomesByStatus: async () => ({
+        posted: 3,
+        replied: 2,
+        resolved: 1,
+        dismissed: 4,
+      }),
+    });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
-    expect(res.json().outcomes).toMatchObject({ posted: 3, replied: 2, resolved: 1, dismissed: 4 });
+    expect(res.json().outcomes).toMatchObject({
+      posted: 3,
+      replied: 2,
+      resolved: 1,
+      dismissed: 4,
+    });
     await app.close();
   });
 
   it("shows system health", async () => {
     const queries = createFakeDashboardQueries({
-      countReviewsByStatus: async () => ({ running: 1, completed: 5, failed: 2 }),
+      countReviewsByStatus: async () => ({
+        running: 1,
+        completed: 5,
+        failed: 2,
+      }),
       queueDepth: async () => 3,
     });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
-    expect(res.json().system).toMatchObject({ reviewsRunning: 1, reviewsCompleted: 5, reviewsFailed: 2, queueDepth: 3 });
+    expect(res.json().system).toMatchObject({
+      reviewsRunning: 1,
+      reviewsCompleted: 5,
+      reviewsFailed: 2,
+      queueDepth: 3,
+    });
     await app.close();
   });
 
-  it("serves the dashboard HTML with the poll + rules renderers intact", async () => {
+  it("serves the dashboard shell with the built Vue bundle mounted", async () => {
     const app = makeApp(createFakeDashboardQueries());
     const res = await app.inject({ method: "GET", url: "/dashboard" });
     expect(res.statusCode).toBe(200);
-    expect(res.body).toContain("function poll()");
-    expect(res.body).toContain("function renderRules");
-    expect(res.body).toContain("function render(state)");
+    expect(res.body).toContain('id="app"');
+    expect(res.body).toContain('src="/dashboard/app.js"');
+    const script = await app.inject({
+      method: "GET",
+      url: "/dashboard/app.js",
+    });
+    expect(script.statusCode).toBe(200);
+    expect(script.headers["content-type"]).toContain("text/javascript");
+    // Minified vite bundle: string literals survive, identifiers do not.
+    expect(script.body).toContain("Verdict");
+    expect(script.body).toContain("Dismissal rate / review");
     await app.close();
+  });
+
+  it("dashboard view: raw metrics and probes, no marketing copy (control-room aesthetic)", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toContain("Learning lag");
+    expect(res.body).toContain("Dismissal rate / review");
+    expect(res.body).toContain("ε-probes");
+    expect(res.body).toContain("LLM provider");
+    expect(res.body).toContain("/api/llm-status");
+    // §8 character: raw numbers/statuses, not SaaS metrics-are-simple copy.
+    expect(res.body).not.toMatch(/health score|intelligence|AI magic/i);
+    await app.close();
+  });
+
+  it("verdict leads the dashboard: uncertain until evidence exists, attention when reviews fail", async () => {
+    const uncertain = makeApp(createFakeDashboardQueries());
+    const res = await uncertain.inject({
+      method: "GET",
+      url: "/api/dashboard",
+    });
+    expect(res.json().verdict.status).toBe("uncertain");
+    await uncertain.close();
+
+    const attention = makeApp(
+      createFakeDashboardQueries({
+        countReviewsByStatus: async () => ({
+          running: 0,
+          completed: 0,
+          failed: 1,
+        }),
+        failedReviews: async () => [
+          {
+            requestId: "req-1",
+            jobId: "j1",
+            repo: "o/r",
+            prId: "7",
+            error: "boom",
+            completedAt: null,
+          },
+        ],
+        dismissalRateTrend: async () => [0.6, 0.5, 0.4, 0.3],
+      }),
+    );
+    const res2 = await attention.inject({
+      method: "GET",
+      url: "/api/dashboard",
+    });
+    // Attention outranks a falling trend: broken runs cannot hide behind learning prose.
+    expect(res2.json().verdict.status).toBe("attention");
+    await attention.close();
   });
 
   it("shows the learning panel: rule counts + learning lag", async () => {
@@ -86,17 +183,28 @@ describe("dashboard", () => {
     });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
-    expect(res.json().learning).toMatchObject({ activeRules: 2, candidateRules: 1, retiredRules: 0, learningLagSeconds: 3600 });
+    expect(res.json().learning).toMatchObject({
+      activeRules: 2,
+      candidateRules: 1,
+      retiredRules: 0,
+      learningLagSeconds: 3600,
+    });
+
+    // The panel must read the field the API actually sends; a stale name
+    // renders NaN and no API-only test would catch it.
+    const script = await app.inject({
+      method: "GET",
+      url: "/dashboard/app.js",
+    });
+    expect(script.body).toContain("learningLagSeconds");
+    expect(script.body).not.toContain("learningLagMs");
     await app.close();
   });
 
   it("rounds a fractional learning lag to match the integer response schema", async () => {
-    // getLearningLagSeconds returns (activatedAt - dismissedAt) / 1000, a
-    // float. The response schema pins learningLagSeconds as integer|null; an
-    // unrounded float makes fast-json-stringify throw (production 500s).
-    // The dashboard labels the row in seconds, so the field carries seconds —
-    // rounded, not converted.
-    const queries = createFakeDashboardQueries({ learningLag: async () => 3600.516 });
+    const queries = createFakeDashboardQueries({
+      learningLag: async () => 3600.516,
+    });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
     expect(res.statusCode).toBe(200);
@@ -107,7 +215,13 @@ describe("dashboard", () => {
   it("§8/§5.7: metrics view shows the dismissal-rate trend and ε-probes", async () => {
     const queries = createFakeDashboardQueries({
       dismissalRateTrend: async () => [0.5, 0.42, 0.3],
-      probes: async () => [{ patternId: "p1", filePath: "src/auth/jwt.ts", at: new Date().toISOString() }],
+      probes: async () => [
+        {
+          patternId: "p1",
+          filePath: "src/auth/jwt.ts",
+          at: new Date().toISOString(),
+        },
+      ],
     });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
@@ -117,27 +231,53 @@ describe("dashboard", () => {
     await app.close();
   });
 
-  it("dashboard view: raw metrics and probes, no marketing copy (control-room aesthetic)", async () => {
-    const app = makeApp(createFakeDashboardQueries({ dismissalRateTrend: async () => [0.5, 0.42, 0.3], probes: async () => [] }));
-    const res = await app.inject({ method: "GET", url: "/dashboard" });
-    expect(res.statusCode).toBe(200);
-    expect(res.body).toContain("Learning lag");
-    expect(res.body).toContain("Dismissal rate / review");
-    expect(res.body).toContain("ε-probes");
-    // §8 character: raw numbers/statuses, not SaaS metrics-are-simple copy.
-    expect(res.body).not.toMatch(/health score|intelligence|AI magic/i);
+  it("dashboard bundle renders the verdict lead panel", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    expect(res.body).toContain("verdict");
+    expect(res.body).toContain("headline");
+    await app.close();
+  });
+
+  it("dashboard panels explain themselves and derive insight lines", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    // Explainer copy is asserted once here, not per panel.
+    expect(res.body).toContain("needs a human");
+    expect(res.body).toContain("training signal");
+    expect(res.body).toContain("audit trail");
+    // Derived insight lines + trend direction language.
+    expect(res.body).toContain("auto-suppressed by learned rules");
+    expect(res.body).toContain("the loop is learning");
     await app.close();
   });
 
   it("shows rules with evidence counts (Phase 3 learned rules view)", async () => {
     const queries = createFakeDashboardQueries({
-      listRules: async () => [{ id: "r1", repo: "owner/repo", ruleType: "ignore", status: "active", pattern: "security:jwt", confidence: 0.9, evidenceCount: 3, positiveCount: 0, negativeCount: 3, createdAt: new Date() }],
+      listRules: async () => [
+        {
+          id: "r1",
+          repo: "owner/repo",
+          ruleType: "ignore",
+          status: "active",
+          pattern: "security:jwt",
+          confidence: 0.9,
+          evidenceCount: 3,
+          positiveCount: 0,
+          negativeCount: 3,
+          createdAt: new Date(),
+        },
+      ],
     });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/rules" });
     expect(res.statusCode).toBe(200);
     expect(res.json()).toHaveLength(1);
-    expect(res.json()[0]).toMatchObject({ pattern: "security:jwt", status: "active", negativeCount: 3 });
+    expect(res.json()[0]).toMatchObject({
+      pattern: "security:jwt",
+      status: "active",
+      negativeCount: 3,
+    });
     await app.close();
   });
 
@@ -146,38 +286,171 @@ describe("dashboard", () => {
       whyDisappeared: async (findingId: string) =>
         findingId === "abc"
           ? {
-              finding: { status: "suppressed", filePath: "src/a.ts", message: "JWT", severity: "error", prId: "200" },
-              pattern: { canonicalMessage: "security:jwt", category: "security" },
-              rule: { status: "active", confidence: 0.9, evidenceCount: 3, positiveCount: 0, negativeCount: 3 },
+              finding: {
+                status: "suppressed",
+                filePath: "src/a.ts",
+                message: "JWT",
+                severity: "error",
+                prId: "200",
+              },
+              pattern: {
+                canonicalMessage: "security:jwt",
+                category: "security",
+              },
+              rule: {
+                status: "active",
+                confidence: 0.9,
+                evidenceCount: 3,
+                positiveCount: 0,
+                negativeCount: 3,
+              },
               evidence: [{ prId: "182", outcome: "dismissed" }],
               lastProbe: null,
             }
           : null,
     });
     const app = makeApp(queries);
-    const res = await app.inject({ method: "GET", url: "/api/why?findingId=abc" });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/why?findingId=abc",
+    });
     expect(res.statusCode).toBe(200);
     expect(res.json()?.rule?.confidence).toBeCloseTo(0.9);
     expect(res.json()?.evidence).toEqual([{ prId: "182", outcome: "dismissed" }]);
 
     // Unknown finding -> null (not an error).
-    const missing = await app.inject({ method: "GET", url: "/api/why?findingId=nope" });
+    const missing = await app.inject({
+      method: "GET",
+      url: "/api/why?findingId=nope",
+    });
     expect(missing.statusCode).toBe(200);
     expect(missing.json()).toBeNull();
+    await app.close();
+  });
+
+  it("shows failed reviews with the request id for log correlation", async () => {
+    const queries = createFakeDashboardQueries({
+      failedReviews: async () => [
+        {
+          requestId: "req-uuid",
+          jobId: "review@o/r@7@sha",
+          repo: "o/r",
+          prId: "7",
+          error: "boom",
+          completedAt: "2026-09-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const app = makeApp(queries);
+    const res = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().failedReviews[0]).toMatchObject({
+      requestId: "req-uuid",
+      error: "boom",
+    });
+    await app.close();
+  });
+
+  it("serves the dedicated failed-reviews page with its own API", async () => {
+    const queries = createFakeDashboardQueries({
+      countReviewsByStatus: async () => ({
+        running: 0,
+        completed: 1,
+        failed: 3,
+      }),
+      failedReviews: async () => [
+        {
+          requestId: "req-1",
+          jobId: "j1",
+          repo: "o/r",
+          prId: "7",
+          error: "boom",
+          completedAt: "2026-09-01T00:00:00.000Z",
+        },
+      ],
+    });
+    const app = makeApp(queries);
+
+    const page = await app.inject({ method: "GET", url: "/errors" });
+    expect(page.statusCode).toBe(200);
+    expect(page.headers["content-type"]).toContain("text/html");
+    expect(page.body).toContain("Failed reviews");
+
+    // Same bundle as the dashboard, mounted by pathname.
+    const script = await app.inject({ method: "GET", url: "/errors/app.js" });
+    expect(script.statusCode).toBe(200);
+    expect(script.headers["content-type"]).toContain("text/javascript");
+
+    const api = await app.inject({ method: "GET", url: "/api/errors" });
+    expect(api.statusCode).toBe(200);
+    expect(api.json()).toMatchObject({ total: 3 });
+    expect(api.json().failures[0].requestId).toBe("req-1");
+    await app.close();
+  });
+
+  it("links the dashboard failures panel to the dedicated errors page", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+    const res = await app.inject({ method: "GET", url: "/dashboard/app.js" });
+    // Minified JSX renders the link as href:"/errors" — assert the target, not
+    // the HTML attribute shape.
+    expect(res.body).toContain("/errors");
+    expect(res.body).toContain("view all");
     await app.close();
   });
 
   it("shows recent activity from the immutable log", async () => {
     const queries = createFakeDashboardQueries({
       recentActivity: async () => [
-        { eventType: "review.completed", repo: "owner/repo", payload: { prId: "42" }, createdAt: new Date() },
-        { eventType: "finding.outcome_changed", repo: "owner/repo", payload: { status: "dismissed" }, createdAt: new Date() },
+        {
+          eventType: "review.completed",
+          repo: "owner/repo",
+          payload: { prId: "42" },
+          createdAt: new Date(),
+        },
+        {
+          eventType: "finding.outcome_changed",
+          repo: "owner/repo",
+          payload: { status: "dismissed" },
+          createdAt: new Date(),
+        },
       ],
     });
     const app = makeApp(queries);
     const res = await app.inject({ method: "GET", url: "/api/dashboard" });
     expect(res.json().recentActivity).toHaveLength(2);
     expect(res.json().recentActivity[0].eventType).toBe("review.completed");
+    await app.close();
+  });
+
+  it("starts with no LLM status, then reports a reachable provider after a check", async () => {
+    const app = makeApp(createFakeDashboardQueries());
+
+    const before = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(before.json().llm).toBeNull();
+
+    const check = await app.inject({ method: "POST", url: "/api/llm-status" });
+    expect(check.statusCode).toBe(200);
+    expect(check.json()).toMatchObject({
+      provider: "openrouter",
+      reachable: true,
+    });
+    expect(check.json().latencyMs).toBeGreaterThanOrEqual(0);
+
+    const after = await app.inject({ method: "GET", url: "/api/dashboard" });
+    expect(after.json().llm).toMatchObject({ reachable: true, error: null });
+    await app.close();
+  });
+
+  it("reports an unreachable LLM with the failure reason", async () => {
+    const app = makeApp(createFakeDashboardQueries(), {
+      review: async () => {
+        throw new Error("connection refused");
+      },
+    });
+    const check = await app.inject({ method: "POST", url: "/api/llm-status" });
+    expect(check.statusCode).toBe(200);
+    expect(check.json()).toMatchObject({ reachable: false, latencyMs: null });
+    expect(check.json().error).toContain("connection refused");
     await app.close();
   });
 
@@ -229,14 +502,26 @@ describe("dashboard auth", () => {
 
   it("rejects wrong credentials with 401", async () => {
     const app = makeAuthedApp();
-    const res = await app.inject({ method: "GET", url: "/api/dashboard", headers: { authorization: `Basic ${Buffer.from("admin:wrong").toString("base64")}` } });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/dashboard",
+      headers: {
+        authorization: `Basic ${Buffer.from("admin:wrong").toString("base64")}`,
+      },
+    });
     expect(res.statusCode).toBe(401);
     await app.close();
   });
 
   it("serves the dashboard with valid credentials", async () => {
     const app = makeAuthedApp();
-    const res = await app.inject({ method: "GET", url: "/api/dashboard", headers: { authorization: `Basic ${Buffer.from("admin:secret").toString("base64")}` } });
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/dashboard",
+      headers: {
+        authorization: `Basic ${Buffer.from("admin:secret").toString("base64")}`,
+      },
+    });
     expect(res.statusCode).toBe(200);
     await app.close();
   });
@@ -245,6 +530,15 @@ describe("dashboard auth", () => {
     const app = makeAuthedApp();
     const res = await app.inject({ method: "GET", url: "/metrics" });
     expect(res.statusCode).toBe(401);
+    await app.close();
+  });
+
+  it("gates the failed-reviews page and API", async () => {
+    const app = makeAuthedApp();
+    for (const url of ["/errors", "/errors/app.js", "/api/errors"]) {
+      const res = await app.inject({ method: "GET", url });
+      expect(res.statusCode).toBe(401);
+    }
     await app.close();
   });
 });

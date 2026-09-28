@@ -25,7 +25,10 @@ import type { ReviewRequest } from "./review/types.ts";
 const config = loadConfig(process.env);
 const logger = createLogger(config);
 const metrics = createMetrics();
-const pool = new Pool({ connectionString: config.DATABASE_URL });
+// connectionTimeoutMillis: without it an unreachable DATABASE_URL hangs
+// runMigrations forever (pg defaults to no connect timeout), so the server
+// never binds the port and fails silently. Fail fast with a clear boot error.
+const pool = new Pool({ connectionString: config.DATABASE_URL, connectionTimeoutMillis: 10_000 });
 const db = createDb(pool);
 const redis = createRedisConnection(config.REDIS_URL);
 // Retained failed jobs are the v1 DLQ (bounded so Redis doesn't grow forever);

@@ -67,6 +67,11 @@ describe("security audit", () => {
   it("no console.* calls anywhere in src", () => {
     const offenders: string[] = [];
     for (const file of listFiles(SRC)) {
+      // Generated dashboard bundle (dist/app.js, vite build) legitimately
+      // ships upstream console calls; the no-console rule guards hand-written code.
+      if (file.slice(SRC.length + 1).startsWith(join("dashboard", "dist"))) {
+        continue;
+      }
       if (codeOnly(readFileSync(file, "utf8")).match(/\bconsole\.\w+\s*\(/)) {
         offenders.push(file);
       }

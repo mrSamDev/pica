@@ -48,6 +48,32 @@ describe.skipIf(!dockerAvailable)("dashboard projection", () => {
     expect(await queries.countReviewsByStatus()).toEqual({ running: 1, completed: 2, failed: 1 });
   });
 
+  it("lists failed reviews with request id in chronological order", async () => {
+    if (db === undefined) throw new Error("db not initialized");
+    const older = randomUUID();
+    const newer = randomUUID();
+    const undated = randomUUID();
+    await db.insert(reviews).values([
+      { id: newer, repo: "fail-order", prId: "2", commitSha: "b", status: "failed", error: "second", completedAt: new Date("2026-09-02T00:00:00Z"), mode: "post" },
+      { id: older, repo: "fail-order", prId: "1", commitSha: "a", status: "failed", error: "first", completedAt: new Date("2026-09-01T00:00:00Z"), mode: "post" },
+      { id: undated, repo: "fail-order", prId: "3", commitSha: "c", status: "failed", error: "undated", completedAt: null, mode: "post" },
+    ]);
+    const queries = makeQueries(db);
+    const failures = await queries.failedReviews(100);
+
+    const mine = failures.filter((f) => f.repo === "fail-order");
+    expect(mine.map((f) => f.requestId)).toEqual([older, newer, undated]);
+    expect(mine.map((f) => f.error)).toEqual(["first", "second", "undated"]);
+
+    const dated = failures.filter((f) => f.completedAt !== null);
+    const ascending = [...dated].sort((a, b) => a.completedAt!.localeCompare(b.completedAt!));
+    expect(dated.map((f) => f.completedAt)).toEqual(ascending.map((f) => f.completedAt));
+    expect(failures.at(-1)?.completedAt ?? null).toBe(null);
+
+    const capped = await queries.failedReviews(2);
+    expect(capped.map((f) => f.error)).toEqual(["first", "second"]);
+  });
+
   it("counts findings by status via GROUP BY", async () => {
     if (db === undefined) throw new Error("db not initialized");
     await db.insert(findings).values([

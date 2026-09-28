@@ -1,7 +1,9 @@
 import { defineConfig } from "oxlint";
 
 export default defineConfig({
-  ignorePatterns: [".pi/**", "tools/oxlint/anti-slop/**", "node_modules/**"],
+  // src/dashboard/vendor/**: vendored third-party bundles (vue.esm-browser) are
+  // generated upstream code — hand-written rules like anti-slop must not judge it.
+  ignorePatterns: [".pi/**", "tools/oxlint/anti-slop/**", "node_modules/**", "src/dashboard/dist/**"],
   jsPlugins: [{ name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" }],
   rules: {
     "no-console": "error",

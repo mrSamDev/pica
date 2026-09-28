@@ -1,13 +1,10 @@
-export const dashboardHtml = `<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Pica — control room</title>
-    <style>
+// Control-room CSS is shared by the dashboard and the failed-reviews page so
+// the two operator views stay visually identical without a second stylesheet.
+const controlRoomCss = `
       body { font-family: ui-monospace, monospace; background: #0b0e11; color: #d7dde3; margin: 0; padding: 2rem; }
-      h1 { font-size: 1.25rem; color: #e8edf2; }
+      h1 { font-size: 1.25rem; color: #e8edf2; margin: 0 0 1rem; }
       .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1rem; }
+      .status-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 1rem; margin-bottom: 1rem; }
       .panel { border: 1px solid #2a3138; border-radius: 6px; padding: 1rem; }
       .panel h2 { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; color: #8b98a5; margin: 0 0 0.5rem; }
       .row { display: flex; justify-content: space-between; padding: 0.2rem 0; font-size: 0.9rem; }
@@ -18,113 +15,61 @@ export const dashboardHtml = `<!doctype html>
       ul.activity { list-style: none; margin: 0; padding: 0; }
       ul.activity li { padding: 0.3rem 0; border-bottom: 1px solid #1c2228; font-size: 0.85rem; }
       .err { color: #ff8b7d; font-size: 0.8rem; padding: 0.15rem 0; word-break: break-word; }
+      .failures { margin-top: 1rem; }
+      .failure-head { display: flex; gap: 0.75rem; align-items: baseline; flex-wrap: wrap; }
+      .failure-head .req { color: #e8edf2; }
+      .view-all { font-size: 0.72rem; letter-spacing: 0; text-transform: none; margin-left: 0.5rem; }
+      .nav { font-size: 0.78rem; margin-left: 0.75rem; }
       .tag { color: #7fb3ff; }
       .muted { color: #5b6672; }
       a { color: #7fb3ff; }
-    </style>
+      .verdict { margin-bottom: 1rem; border-left: 3px solid #5b6672; }
+      .verdict.improving { border-left-color: #7ddc9a; }
+      .verdict.uncertain { border-left-color: #e8c46b; }
+      .verdict.attention { border-left-color: #ff8b7d; }
+      .verdict .headline { font-size: 1rem; color: #e8edf2; margin: 0 0 0.5rem; }
+      .verdict .reasons { margin: 0 0 0.5rem; padding-left: 1.2rem; font-size: 0.9rem; }
+      .verdict .next { font-size: 0.85rem; margin: 0; color: #b8c2cc; }
+      .verdict .next .k { color: #8b98a5; margin-right: 0.4rem; }
+      .explain { font-size: 0.78rem; color: #6d7a86; margin: 0 0 0.6rem; line-height: 1.45; }
+      .insight { font-size: 0.82rem; color: #b8c2cc; margin: 0.5rem 0 0; }
+      .spark { display: block; width: 100%; height: 34px; margin-top: 0.6rem; }
+      .spark polyline { fill: none; stroke: #7fb3ff; stroke-width: 2; }
+      button.action { font: inherit; margin-top: 0.75rem; background: #161b20; color: #d7dde3; border: 1px solid #2a3138; border-radius: 4px; padding: 0.4rem 0.8rem; cursor: pointer; }
+      button.action:hover:not(:disabled) { border-color: #7fb3ff; }
+      button.action:disabled { color: #5b6672; cursor: default; }
+`;
+
+export const dashboardHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pica — control room</title>
+    <style>${controlRoomCss}    </style>
   </head>
   <body>
-    <h1>Pica — control room</h1>
-    <div class="grid">
-      <div class="panel"><h2>System health</h2><div id="system"><p class="empty">Loading…</p></div></div>
-      <div class="panel"><h2>Review behavior</h2><div id="behavior"><p class="empty">Loading…</p></div></div>
-      <div class="panel"><h2>Outcomes</h2><div id="outcomes"><p class="empty">Loading…</p></div></div>
-      <div class="panel"><h2>Learning</h2><div id="learning"><p class="empty">Loading…</p></div><div id="probes"></div><div id="rules"><p class="empty">Loading…</p></div></div>
-      <div class="panel"><h2>Recent activity</h2><div id="activity"><p class="empty">Loading…</p></div></div>
-      <div class="panel"><h2>Failed reviews</h2><div id="failures"><p class="empty">Loading…</p></div></div>
-    </div>
-    <script>
-      function row(k, v) { return '<div class="row"><span class="k">' + esc(k) + '</span><span class="v">' + v + '</span></div>'; }
-      function esc(v) { return String(v == null ? '' : v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
-      // §8 north-star trend as raw percentages, oldest -> newest: a falling
-      // number is readable learning, not a made-up "health" line.
-      function trendRow(rates) { return rates.length === 0 ? '' : row('Dismissal rate / review', rates.map(function (r) { return Math.round(r * 100) + '%'; }).join(' → ')); }
-      function render(state) {
-        document.getElementById('system').innerHTML =
-          row('Running', state.system.reviewsRunning) +
-          row('Completed', state.system.reviewsCompleted) +
-          row('Failed', state.system.reviewsFailed) +
-          row('Queue depth', state.system.queueDepth) +
-          row('Failed jobs (DLQ)', state.system.failedJobs) +
-          '<p class="empty">Failed jobs are retained as the DLQ; re-drive via redis-cli.</p>';
-        document.getElementById('behavior').innerHTML =
-          row('Findings / PR', state.reviewBehavior.findingsPerPr) +
-          row('Posted', state.reviewBehavior.posted) +
-          row('Suppressed', state.reviewBehavior.suppressed) +
-          row('Duplicate', state.reviewBehavior.duplicate);
-        document.getElementById('outcomes').innerHTML =
-          row('Posted', state.outcomes.posted) +
-          row('Replied', state.outcomes.replied) +
-          row('Resolved', state.outcomes.resolved) +
-          row('Dismissed', state.outcomes.dismissed);
-        document.getElementById('learning').innerHTML =
-          row('Active rules', state.learning.activeRules) +
-          row('Candidate rules', state.learning.candidateRules) +
-          row('Retired rules', state.learning.retiredRules) +
-          (state.learning.learningLagSeconds !== null
-            ? row('Learning lag (s)', state.learning.learningLagSeconds)
-            : '<p class="empty">Learning lag: no rule has activated yet.</p>') +
-          trendRow(state.learning.dismissalRateTrend);
-        var probes = document.getElementById('probes');
-        if (state.learning.probes.length === 0) {
-          probes.innerHTML = '<p class="empty">Probes: none yet — nothing suppressed to re-check.</p>';
-        } else {
-          probes.innerHTML = '<h2>ε-probes (suppressed patterns still generating evidence)</h2><ul class="activity">' +
-            state.learning.probes.map(function (p) {
-              return '<li><code>' + esc(p.filePath) + '</code> <span class="muted">' + esc(new Date(p.at).toISOString().slice(0, 10)) + '</span></li>';
-            }).join('') + '</ul>';
-        }
-        var activity = document.getElementById('activity');
-        if (state.recentActivity.length === 0) {
-          activity.innerHTML = '<p class="empty">No activity yet.</p>';
-        } else {
-          activity.innerHTML = '<ul class="activity">' + state.recentActivity.map(function (a) {
-            return '<li><span class="tag">' + esc(a.eventType) + '</span> <span class="muted">' + esc(a.repo) + '</span></li>';
-          }).join('') + '</ul>';
-        }
-        var failures = document.getElementById('failures');
-        if (state.failedReviews.length === 0) {
-          failures.innerHTML = '<p class="empty">No failed reviews.</p>';
-        } else {
-          failures.innerHTML = state.failedReviews.map(function (f) {
-            return '<div class="rule"><code>' + esc(f.jobId) + '</code>' +
-              ' <span class="muted">' + esc(f.completedAt ? f.completedAt.slice(0, 19) : '') + '</span>' +
-              '<div class="err">' + esc(f.error) + '</div></div>';
-          }).join('');
-        }
-      }
-      async function renderRules() {
-        try {
-          var res = await fetch('/api/rules');
-          var rules = await res.json();
-          var el = document.getElementById('rules');
-          if (!rules || rules.length === 0) {
-            el.innerHTML = '<p class="empty">No rules yet. Dismissed findings accumulate here as candidate and active rules.</p>';
-            return;
-          }
-          el.innerHTML = rules.map(function (r) {
-            var conf = r.confidence !== null ? (r.confidence * 100).toFixed(0) + '%' : '—';
-            var when = r.createdAt ? new Date(r.createdAt).toISOString().slice(0, 10) : '';
-            return '<div class="rule"><span class="tag">' + esc(r.ruleType) + ':' + esc(r.status) + '</span> ' +
-              '<span class="k">' + esc(r.pattern || r.id) + '</span>' +
-              ' <span class="muted">conf ' + esc(conf) + ' · ev ' + esc(r.evidenceCount) + ' (neg ' + esc(r.negativeCount) + ', pos ' + esc(r.positiveCount) + ') · ' + esc(when) + '</span></div>';
-          }).join('');
-        } catch (e) { /* keep last state */ }
-      }
-      async function poll() {
-        try {
-          var res = await fetch('/api/dashboard');
-          render(await res.json());
-        } catch (e) { /* keep last state on transient errors */ }
-      }
-      poll();
-      renderRules();
-      setInterval(poll, 3000);
-    </script>
+    <h1>Pica — control room <a class="nav" href="/errors">failed reviews →</a></h1>
+    <div id="app"></div>
+    <script type="module" src="/dashboard/app.js"></script>
   </body>
 </html>`;
 
-// Phase-5 ε-probing adds the `lastProbe` field later; until then it stays null.
+export const errorsHtml = `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pica — failed reviews</title>
+    <style>${controlRoomCss}    </style>
+  </head>
+  <body>
+    <h1><a href="/dashboard">Pica</a> · Failed reviews</h1>
+    <div id="app"></div>
+    <script type="module" src="/errors/app.js"></script>
+  </body>
+</html>`;
+
 export const whyHtml = `<!doctype html>
 <html lang="en">
   <head>

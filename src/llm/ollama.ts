@@ -8,24 +8,33 @@ export interface OllamaDeps {
   model: string;
   timeoutMs: number;
   baseUrl?: string;
+  apiKey?: string;
   fetchImpl?: typeof fetch;
 }
 
 const DEFAULT_BASE_URL = "http://localhost:11434";
+
+// Operators paste OpenAI-style roots ending in /v1; ollama's native API lives
+// at the server root, so strip the suffix instead of requesting /v1/api/chat.
+function normalizeBaseUrl(url: string): string {
+  return url.replace(/\/+$/, "").replace(/\/v1$/, "");
+}
 
 const ollamaResponseSchema = z.object({
   message: z.object({ content: z.string() }),
 });
 
 export function createOllamaLLM(deps: OllamaDeps): LLMClient {
-  const baseUrl = deps.baseUrl ?? DEFAULT_BASE_URL;
+  const baseUrl = normalizeBaseUrl(deps.baseUrl ?? DEFAULT_BASE_URL);
   const fetchImpl = deps.fetchImpl ?? fetch;
 
   return {
     async review(prompt) {
+      const headers = deps.apiKey ? { "Content-Type": "application/json", Authorization: `Bearer ${deps.apiKey}` } : { "Content-Type": "application/json" };
+
       const options: RequestInit = {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         body: JSON.stringify({ model: deps.model, stream: false, messages: [{ role: "user", content: prompt }] }),
         // A hung model must not hold a review worker forever.
         signal: AbortSignal.timeout(deps.timeoutMs),
