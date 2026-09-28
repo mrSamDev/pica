@@ -76,6 +76,19 @@ describe("config", () => {
     expect(config.LLM_BASE_URL).toBe("http://gpu-box:11434");
   });
 
+  it("requires LLM_API_KEY for ollama.com cloud endpoints", () => {
+    expect(() => loadConfig({ ...validEnv(), LLM_API_KEY: undefined, LLM_PROVIDER: "ollama", LLM_BASE_URL: "https://ollama.com/v1" })).toThrow(/LLM_API_KEY/);
+    expect(() => loadConfig({ ...validEnv(), LLM_API_KEY: undefined, LLM_PROVIDER: "ollama", LLM_BASE_URL: "HTTPS://OLLAMA.COM/v1" })).toThrow(/LLM_API_KEY/);
+    expect(() => loadConfig({ ...validEnv(), LLM_API_KEY: undefined, LLM_PROVIDER: "ollama", LLM_BASE_URL: "http://gpu-box:11434" })).not.toThrow();
+    expect(() => loadConfig({ ...validEnv(), LLM_API_KEY: undefined, LLM_PROVIDER: "ollama", LLM_BASE_URL: "https://gpu-box:11434" })).not.toThrow();
+    expect(() => loadConfig({ ...validEnv(), LLM_PROVIDER: "ollama", LLM_BASE_URL: "https://ollama.com/v1" })).not.toThrow();
+  });
+
+  it("trims whitespace off secret values from a hand-edited env file", () => {
+    expect(loadConfig({ ...validEnv(), LLM_API_KEY: " test-llm-key " }).LLM_API_KEY).toBe("test-llm-key");
+    expect(loadConfig({ ...validEnv(), PLATFORM_TOKEN: "test-platform-token\r" }).PLATFORM_TOKEN).toBe("test-platform-token");
+  });
+
   it("rejects an invalid LLM_PROVIDER and LLM_BASE_URL", () => {
     expect(() => loadConfig({ ...validEnv(), LLM_PROVIDER: "gemini" })).toThrow(/LLM_PROVIDER/);
     expect(() => loadConfig({ ...validEnv(), LLM_BASE_URL: "not-a-url" })).toThrow(/LLM_BASE_URL/);

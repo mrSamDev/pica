@@ -30,7 +30,24 @@ export type SeverityWeights = z.infer<typeof severityWeightsSchema>;
 // docker compose renders an absent optional var as "" in the container. Treat a
 // blanked string as unset so superRefine can enforce "token OR app creds"
 // instead of failing min(1) on a value the operator never actually provided.
-const unsetIfBlank = (value: string | undefined): string | undefined => (value && value.trim().length > 0 ? value : undefined);
+// The value is trimmed because a hand-edited .env can leave a trailing space or
+// CR on a secret, which would otherwise be sent verbatim (e.g. a bearer token
+// ending in whitespace) and rejected by the provider as unauthorized.
+const trimmedOrUndefined = (value: string | undefined): string | undefined => {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : undefined;
+};
+
+// Hosted ollama (ollama.com) always requires a bearer key; a daemon on
+// localhost or the LAN does not. Keying off the host instead of the scheme
+// keeps a TLS-terminated local daemon keyless. The URL parses because z.url()
+// validated LLM_BASE_URL before superRefine runs.
+function isOllamaCloudEndpoint(baseUrl: string | undefined): boolean {
+  if (!baseUrl) return false;
+  // URL.hostname is already lowercased, so HTTPS://OLLAMA.COM cannot slip past.
+  const host = new URL(baseUrl).hostname;
+  return host === "ollama.com" || host.endsWith(".ollama.com");
+}
 
 const configSchema = z
   .object({
@@ -45,19 +62,19 @@ const configSchema = z
     LLM_PROVIDER: z.enum(["openrouter", "ollama", "openai", "anthropic"]).default("openrouter"),
     // Required for openrouter/openai/anthropic; optional for ollama (a local
     // daemon runs keyless, ollama.com cloud models need the key).
-    LLM_API_KEY: z.string().min(1).optional().transform(unsetIfBlank),
+    LLM_API_KEY: z.string().min(1).optional().transform(trimmedOrUndefined),
     // Optional endpoint override; each provider client has its own default
     // (openrouter.ai/api/v1, api.openai.com/v1, localhost:11434, api.anthropic.com/v1).
-    LLM_BASE_URL: z.url().optional().transform(unsetIfBlank),
-    PLATFORM_TOKEN: z.string().optional().transform(unsetIfBlank),
+    LLM_BASE_URL: z.url().optional().transform(trimmedOrUndefined),
+    PLATFORM_TOKEN: z.string().optional().transform(trimmedOrUndefined),
     // GitHub App server-to-server auth (GitHub only): App ID + private key + an
     // installation ID. Replaces PLATFORM_TOKEN when set; install tokens expire
     // hourly, so they are minted/refreshed at request time, not read once. The
     // private key may be raw PEM or its base64 encoding. At least one auth path
     // is required (see superRefine below).
-    GITHUB_APP_ID: z.string().optional().transform(unsetIfBlank),
-    GITHUB_APP_PRIVATE_KEY: z.string().optional().transform(unsetIfBlank),
-    GITHUB_INSTALLATION_ID: z.string().optional().transform(unsetIfBlank),
+    GITHUB_APP_ID: z.string().optional().transform(trimmedOrUndefined),
+    GITHUB_APP_PRIVATE_KEY: z.string().optional().transform(trimmedOrUndefined),
+    GITHUB_INSTALLATION_ID: z.string().optional().transform(trimmedOrUndefined),
     PLATFORM: z.enum(["github", "bitbucket"]).default("github"),
     LLM_MODEL: z.string().default("deepseek/deepseek-v4-flash-0731:free"),
     // OpenRouter-only chain-of-thought param; other providers ignore it. Some
@@ -172,6 +189,17 @@ const configSchema = z
         code: "custom",
         path: ["LLM_API_KEY"],
         message: `LLM_API_KEY is required for provider "${data.LLM_PROVIDER}" (only ollama runs keyless)`,
+      });
+    }
+    // Ollama is only keyless as a local daemon. The hosted service rejects
+    // keyless requests with a 401 on every review; booting green and failing at
+    // review time is the silent misconfiguration this guard turns into a
+    // startup error.
+    if (data.LLM_PROVIDER === "ollama" && !data.LLM_API_KEY && isOllamaCloudEndpoint(data.LLM_BASE_URL)) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["LLM_API_KEY"],
+        message: "LLM_API_KEY is required when LLM_PROVIDER=ollama points at an ollama.com endpoint; only a local or LAN daemon runs keyless",
       });
     }
     if (appCredsComplete && data.PLATFORM === "bitbucket") {
